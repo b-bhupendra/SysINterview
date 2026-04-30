@@ -113,11 +113,28 @@ import { SystemDesignScenario } from './knowledge-base';
                   <div class="space-y-3 pt-2">
                     <div>
                       <label for="endpoint-input" class="block text-[10px] uppercase text-slate-500 mb-1 tracking-wider font-semibold">Endpoint (Requires CORS)</label>
-                      <input id="endpoint-input" type="text" [value]="aiService.lmConfig().endpoint" (input)="updateEndpoint($event)" class="w-full bg-slate-950 border border-slate-700 text-slate-200 text-xs px-2 py-1.5 rounded focus:outline-none focus:border-blue-500 transition-colors">
+                      <input id="endpoint-input" type="text" [value]="aiService.lmConfig().endpoint" (change)="updateEndpoint($event)" class="w-full bg-slate-950 border border-slate-700 text-slate-200 text-xs px-2 py-1.5 rounded focus:outline-none focus:border-blue-500 transition-colors">
                     </div>
                     <div>
-                      <label for="model-input" class="block text-[10px] uppercase text-slate-500 mb-1 tracking-wider font-semibold">Model Name</label>
-                      <input id="model-input" type="text" [value]="aiService.lmConfig().model" (input)="updateModel($event)" class="w-full bg-slate-950 border border-slate-700 text-slate-200 text-xs px-2 py-1.5 rounded focus:outline-none focus:border-blue-500 transition-colors">
+                      <label class="block text-[10px] uppercase text-slate-500 mb-1 tracking-wider font-semibold">Model Name</label>
+                      @if (aiService.availableModels().length > 0) {
+                        <select (change)="updateModel($event)" class="w-full bg-slate-950 border border-slate-700 text-slate-200 text-xs px-2 py-1.5 rounded flex outline-none focus:border-blue-500 cursor-pointer text-ellipsis overflow-hidden pr-6">
+                          @for (model of aiService.availableModels(); track model) {
+                             <option [value]="model" [selected]="aiService.lmConfig().model === model">{{model}}</option>
+                          }
+                        </select>
+                      } @else {
+                        <input id="model-input" type="text" [value]="aiService.lmConfig().model" (input)="updateModel($event)" class="w-full bg-slate-950 border border-slate-700 text-slate-200 text-xs px-2 py-1.5 rounded focus:outline-none focus:border-blue-500 transition-colors" placeholder="e.g. local-model">
+                        <div class="mt-2 p-3 bg-indigo-950/40 border border-indigo-900/60 rounded-lg flex flex-col gap-1.5">
+                          <span class="text-[11px] text-indigo-300 font-bold tracking-wide flex items-center gap-1.5"><mat-icon class="text-[14px] w-[14px] h-[14px]">lightbulb</mat-icon> No models detected</span>
+                          <span class="text-[10px] text-indigo-400/80 leading-relaxed">Download recommended offline models in LM Studio:</span>
+                          <ul class="text-[10px] text-indigo-200 list-disc list-inside space-y-0.5 mt-0.5 ml-1">
+                            <li>Llama-3-8B-Instruct</li>
+                            <li>Phi-3-Mini-4k-Instruct</li>
+                            <li>Gemma-2B-IT</li>
+                          </ul>
+                        </div>
+                      }
                     </div>
                     <div>
                       <label for="temperature-input" class="block text-[10px] uppercase text-slate-500 mb-1 tracking-wider font-semibold">Temperature ({{aiService.lmConfig().temperature}})</label>
@@ -172,11 +189,15 @@ export class AiAssistantComponent implements AfterViewChecked {
     const checked = (e.target as HTMLInputElement).checked;
     this.aiService.lmConfig.update(c => ({ ...c, enabled: checked }));
     this.testResult = '';
+    if (checked) {
+      this.aiService.fetchLmStudioModels(this.aiService.lmConfig().endpoint);
+    }
   }
 
   updateEndpoint(e: Event) {
     const val = (e.target as HTMLInputElement).value;
     this.aiService.lmConfig.update(c => ({ ...c, endpoint: val }));
+    this.aiService.fetchLmStudioModels(val);
   }
 
   updateModel(e: Event) {
@@ -191,6 +212,7 @@ export class AiAssistantComponent implements AfterViewChecked {
 
   async testLmStudio() {
     this.testResult = 'Testing connection...';
+    await this.aiService.fetchLmStudioModels(this.aiService.lmConfig().endpoint);
     const success = await this.aiService.checkLmStudio(this.aiService.lmConfig().endpoint);
     this.testSuccess = success;
     if (success) {

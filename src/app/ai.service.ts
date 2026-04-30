@@ -25,6 +25,8 @@ export class AiService {
     temperature: 0.7
   });
 
+  availableModels = signal<string[]>([]);
+
   messages = signal<ChatMessage[]>([]);
   isProcessing = signal(false);
 
@@ -70,6 +72,25 @@ export class AiService {
     }
 
     return `[OFFLINE MODE] Scenario: ${scenario.title}.\n\nI am currently offline. You can ask me to:\n- Explain the theory\n- List the components\n- Discuss the bottlenecks\n- Give diagram hints\n\nAlternatively, switch to Gemini AI or connect to a local LM Studio server in the settings.`;
+  }
+
+  async fetchLmStudioModels(endpoint: string) {
+    try {
+      const modelsEndpoint = endpoint.replace('/chat/completions', '/models');
+      const res = await fetch(modelsEndpoint);
+      if (res.ok) {
+        const data = await res.json();
+        const models = data.data.map((m: any) => m.id);
+        this.availableModels.set(models);
+        if (models.length > 0 && !models.includes(this.lmConfig().model)) {
+          this.lmConfig.update(c => ({...c, model: models[0]}));
+        }
+        return true;
+      }
+    } catch {
+      this.availableModels.set([]);
+    }
+    return false;
   }
 
   async checkLmStudio(endpoint: string): Promise<boolean> {

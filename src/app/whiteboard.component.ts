@@ -18,6 +18,20 @@ type Shape = PathShape | RectShape | CircleShape | TextShape | LineShape;
   template: `
     <div class="relative w-full h-full flex flex-col bg-slate-950 border-l border-slate-800 overflow-hidden bg-[radial-gradient(#1e293b_1px,transparent_1px)] [background-size:24px_24px]">
       
+      @if (textInput.visible) {
+        <input 
+          #textInputField
+          type="text"
+          class="absolute z-50 bg-slate-800 text-white outline-none border border-blue-500 rounded px-2 py-1 shadow-lg"
+          [style.left.px]="textInput.x"
+          [style.top.px]="textInput.y - 12"
+          [style.font]="currentFont"
+          [style.color]="currentColor"
+          (keydown.enter)="commitText($any($event).target.value)"
+          (blur)="commitText($any($event).target.value)"
+        />
+      }
+      
       <!-- Toolbar -->
       <div class="absolute bottom-8 left-1/2 -translate-x-1/2 z-10 flex items-center space-x-1 bg-slate-900 border border-slate-800 p-1.5 rounded-xl shadow-2xl backdrop-blur-md">
         @for (tool of tools; track tool.val) {
@@ -128,6 +142,8 @@ export class WhiteboardComponent implements AfterViewInit {
   
   currentFont = this.fonts[0].val;
 
+  textInput = { visible: false, x: 0, y: 0, text: '' };
+
   shapes: Shape[] = [];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   currentShape: any = null;
@@ -218,6 +234,15 @@ export class WhiteboardComponent implements AfterViewInit {
     this.draw();
   }
 
+  commitText(val: string) {
+    if (!this.textInput.visible) return;
+    if (val && val.trim()) {
+      this.shapes.push({ type: 'text', x: this.textInput.x, y: this.textInput.y, text: val.trim(), color: this.currentColor, font: this.currentFont });
+      this.draw();
+    }
+    this.textInput.visible = false;
+  }
+
   private getCoordinates(e: MouseEvent | TouchEvent) {
     const rect = this.canvasRef.nativeElement.getBoundingClientRect();
     let clientX, clientY;
@@ -252,10 +277,11 @@ export class WhiteboardComponent implements AfterViewInit {
     } else if (m === 'line') {
       this.currentShape = { type: 'line', x1: x, y1: y, x2: x, y2: y, color: this.currentColor, width: this.currentWidth };
     } else if (m === 'text') {
-      const text = prompt('Enter text:');
-      if (text) {
-        this.shapes.push({ type: 'text', x, y, text, color: this.currentColor, font: this.currentFont });
-      }
+      this.textInput = { visible: true, x, y, text: '' };
+      setTimeout(() => {
+        const input = document.querySelector('input.z-50') as HTMLInputElement;
+        if (input) input.focus();
+      }, 0);
       this.isDrawing = false;
     }
     this.draw();

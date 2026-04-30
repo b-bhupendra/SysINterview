@@ -48,6 +48,19 @@ import { MatIconModule } from '@angular/material/icon';
                 >
                    "{{scenario.description}}"
                 </p>
+                <button (click)="toggleBook(scenario, $event)"
+                   class="mt-3 w-full py-1.5 flex items-center justify-center gap-1.5 text-[11px] rounded transition-colors font-medium border"
+                   [class.bg-blue-500]="activeScenario()?.id === scenario.id"
+                   [class.text-white]="activeScenario()?.id === scenario.id"
+                   [class.border-blue-400]="activeScenario()?.id === scenario.id"
+                   [class.hover:bg-blue-400]="activeScenario()?.id === scenario.id"
+                   [class.bg-slate-800/80]="activeScenario()?.id !== scenario.id"
+                   [class.border-slate-700]="activeScenario()?.id !== scenario.id"
+                   [class.text-slate-300]="activeScenario()?.id !== scenario.id"
+                   [class.hover:bg-slate-700]="activeScenario()?.id !== scenario.id"
+                >
+                   <mat-icon class="text-[16px] w-[16px] h-[16px]">menu_book</mat-icon> Open Handbook
+                </button>
              </button>
            }
         </div>
@@ -73,6 +86,91 @@ import { MatIconModule } from '@angular/material/icon';
         }
         
         <app-whiteboard class="flex-1 relative block overflow-hidden"></app-whiteboard>
+
+        <!-- Book Mode Overlay -->
+        @if (bookMode() && activeScenario()) {
+          <div class="absolute inset-4 z-30 flex items-stretch shadow-[0_20px_50px_rgba(0,0,0,0.8)] rounded-xl overflow-hidden animate-in zoom-in-95 duration-300">
+             <!-- Book Layout -->
+             <div class="flex-1 flex bg-[#fefcf8] text-stone-900 border-2 border-stone-300/50 relative">
+               
+               <!-- Close Button -->
+               <button (click)="bookMode.set(false)" class="absolute top-4 right-4 p-2 text-stone-400 hover:text-stone-700 transition z-50 rounded-full hover:bg-stone-200">
+                  <mat-icon>close</mat-icon>
+               </button>
+
+               <!-- Left Page (Theory & Components) -->
+               <div class="flex-1 border-r border-[#e5e0d8] shadow-[2px_0_15px_rgba(0,0,0,0.05)] p-12 overflow-y-auto font-serif relative">
+                  <!-- Decorative spine gradient -->
+                  <div class="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-[#ebe5db] to-transparent pointer-events-none"></div>
+                  
+                  <div class="max-w-xl mx-auto space-y-8 relative z-10">
+                     <p class="text-xs font-sans tracking-widest uppercase text-stone-400 font-bold mb-2">Architect's Reference</p>
+                     <h2 class="text-4xl font-bold tracking-tight text-stone-800">{{activeScenario()?.title}}</h2>
+                     <p class="text-lg italic text-stone-600 font-medium">"{{activeScenario()?.description}}"</p>
+                     
+                     <div class="space-y-4 pt-4">
+                       <h3 class="text-2xl font-bold text-stone-800 flex items-center gap-2 border-b-2 border-stone-200 pb-2">
+                         <mat-icon class="text-indigo-600">auto_stories</mat-icon> Concept & Theory
+                       </h3>
+                       <p class="text-[15px] text-stone-700 leading-relaxed text-justify">{{activeScenario()?.theory || 'Theory not available offline.'}}</p>
+                     </div>
+
+                     <div class="space-y-4 pt-4">
+                       <h3 class="text-2xl font-bold text-stone-800 flex items-center gap-2 border-b-2 border-stone-200 pb-2">
+                         <mat-icon class="text-emerald-700">hub</mat-icon> Core Components
+                       </h3>
+                       <ul class="list-none space-y-3">
+                         @for (comp of activeScenario()?.components; track comp) {
+                           <li class="flex items-start gap-2">
+                             <mat-icon class="text-emerald-600 text-[20px] w-5 h-5 mt-0.5 shrink-0">check_circle</mat-icon>
+                             <span class="text-stone-700 text-[15px]">{{comp}}</span>
+                           </li>
+                         }
+                       </ul>
+                     </div>
+                  </div>
+               </div>
+
+               <!-- Right Page (Bottlenecks & Diagram Hints) -->
+               <div class="flex-1 p-12 overflow-y-auto font-serif relative">
+                  <!-- Decorative spine gradient -->
+                  <div class="absolute left-0 top-0 bottom-0 w-12 bg-gradient-to-r from-[#e5e0d8] via-[#f1eee8] to-transparent pointer-events-none"></div>
+
+                  <div class="max-w-xl mx-auto space-y-8 pt-8 relative z-10">
+                     
+                     <div class="space-y-4">
+                       <h3 class="text-2xl font-bold text-stone-800 flex items-center gap-2 border-b-2 border-stone-200 pb-2">
+                         <mat-icon class="text-rose-600">warning_amber</mat-icon> Bottlenecks & Tradeoffs
+                       </h3>
+                       <ul class="list-disc list-outside pl-6 space-y-3 text-stone-700 text-[15px] leading-relaxed marker:text-rose-500">
+                         @for (bot of activeScenario()?.bottlenecks; track bot) {
+                           <li>{{bot}}</li>
+                         }
+                       </ul>
+                     </div>
+
+                     <div class="space-y-4 pt-6">
+                       <h3 class="text-2xl font-bold text-stone-800 flex items-center gap-2 border-b-2 border-stone-200 pb-2">
+                         <mat-icon class="text-amber-700">draw</mat-icon> Architect's Sketchpad
+                       </h3>
+                       <div class="bg-[#f2efe9] p-6 rounded-lg text-stone-800 text-[15px] leading-relaxed border border-stone-300 shadow-inner font-sans">
+                         {{activeScenario()?.diagramHints || 'No diagram hints available.'}}
+                       </div>
+                       
+                       <div class="mt-12 flex justify-center">
+                         <button (click)="bookMode.set(false)" class="flex items-center gap-2 px-8 py-3.5 rounded-full bg-stone-800 text-stone-100 font-sans text-sm font-semibold hover:bg-stone-700 transition shadow-[0_4px_14px_rgba(0,0,0,0.25)] hover:-translate-y-0.5 duration-200 outline-none focus:ring-4 focus:ring-stone-800/30">
+                           Close Book and Start Drawing
+                           <mat-icon class="text-[18px] w-[18px] h-[18px]">edit</mat-icon>
+                         </button>
+                       </div>
+                     </div>
+                  </div>
+               </div>
+
+             </div>
+          </div>
+        }
+
       </main>
 
       <!-- Right Sidebar (AI Copilot) -->
@@ -84,8 +182,18 @@ import { MatIconModule } from '@angular/material/icon';
 export class App {
   scenarios = SCENARIOS;
   activeScenario = signal<SystemDesignScenario | null>(null);
+  bookMode = signal<boolean>(false);
 
   selectScenario(scenario: SystemDesignScenario) {
     this.activeScenario.set(scenario);
+    this.bookMode.set(false);
+  }
+
+  toggleBook(scenario: SystemDesignScenario, event: Event) {
+    event.stopPropagation();
+    if (this.activeScenario()?.id !== scenario.id) {
+      this.activeScenario.set(scenario);
+    }
+    this.bookMode.set(!this.bookMode());
   }
 }
