@@ -8,13 +8,14 @@ type ShapeMode = 'select' | 'pen' | 'rect' | 'circle' | 'text' | 'line' | 'erase
 interface BaseShape {
   id: string;
   color: string;
-  width: number;
+  strokeWidth: number;
+  opacity?: number;
   isSelected?: boolean;
 }
 
 interface PathShape extends BaseShape { type: 'path'; path: {x: number, y: number}[]; }
-interface RectShape extends BaseShape { type: 'rect'; x: number; y: number; w: number; h: number; }
-interface CircleShape extends BaseShape { type: 'circle'; x: number; y: number; r: number; }
+interface RectShape extends BaseShape { type: 'rect'; x: number; y: number; width: number; height: number; }
+interface CircleShape extends BaseShape { type: 'circle'; x: number; y: number; radius: number; }
 interface TextShape extends BaseShape { type: 'text'; x: number; y: number; text: string; font: string; }
 interface LineShape extends BaseShape { type: 'line'; x1: number; y1: number; x2: number; y2: number; }
 
@@ -41,209 +42,11 @@ interface LayerGroup {
   standalone: true,
   imports: [CommonModule, MatIconModule, DragDropModule],
   template: `
-    <div class="relative w-full h-full flex flex-col bg-slate-950 border-l border-slate-800 overflow-hidden bg-[radial-gradient(#1e293b_1px,transparent_1px)] [background-size:24px_24px]">
+    <div class="relative w-full h-full flex flex-col bg-slate-950 overflow-hidden">
       
-      @if (textInput.visible) {
-        <input 
-          #textInputField
-          type="text"
-          class="absolute z-50 bg-transparent outline-none border border-blue-500/50 focus:border-blue-500 border-dashed rounded px-1 py-0.5 shadow-xl"
-          [style.left.px]="textInput.x"
-          [style.top.px]="textInput.y - 12"
-          [style.font]="currentFont"
-          [style.color]="currentColor"
-          placeholder="Type here..."
-          (keydown.enter)="commitText($any($event).target.value)"
-          (blur)="commitText($any($event).target.value)"
-        />
-      }
-
-      <!-- Undo/Redo/Delete Floating -->
-      <div class="absolute top-4 left-4 z-20 flex gap-2">
-        <div class="flex gap-1 bg-slate-900/90 border border-slate-800 p-1 rounded-lg backdrop-blur-md">
-          <button (click)="undo()" [disabled]="historyIndex <= 0" 
-                  class="p-2 text-slate-400 hover:text-white disabled:opacity-30 transition">
-            <mat-icon class="text-[18px] w-[18px] h-[18px]">undo</mat-icon>
-          </button>
-          <button (click)="redo()" [disabled]="historyIndex >= history.length - 1" 
-                  class="p-2 text-slate-400 hover:text-white disabled:opacity-30 transition">
-            <mat-icon class="text-[18px] w-[18px] h-[18px]">redo</mat-icon>
-          </button>
-        </div>
-        
-        @if (selectedShape) {
-          <div class="flex gap-1 bg-rose-900/40 border border-rose-500/30 p-1 rounded-lg backdrop-blur-md">
-            <button (click)="deleteSelected()" 
-                    class="p-2 text-rose-400 hover:text-rose-200 transition">
-              <mat-icon class="text-[18px] w-[18px] h-[18px]">delete</mat-icon>
-            </button>
-          </div>
-        }
-      </div>
-
-      <!-- Layers Panel -->
-      <div class="absolute top-4 right-4 z-20 w-64 bg-slate-900/90 border border-slate-800 rounded-xl shadow-2xl backdrop-blur-md overflow-hidden flex flex-col transition-all h-fit max-h-[80vh]">
-        <div class="p-3 border-b border-slate-800 flex items-center justify-between bg-slate-800/50">
-          <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Layers</span>
-          <div class="flex gap-1">
-            <button (click)="addGroup()" class="text-amber-500/80 hover:text-amber-400 transition" title="New Group">
-              <mat-icon class="text-[18px] w-[18px] h-[18px]">create_new_folder</mat-icon>
-            </button>
-            <button (click)="addLayer()" class="text-blue-400 hover:text-blue-300 transition" title="New Layer">
-              <mat-icon class="text-[18px] w-[18px] h-[18px]">add_circle</mat-icon>
-            </button>
-          </div>
-        </div>
-        
-        <div class="overflow-y-auto pt-2 pb-4" cdkDropList (cdkDropListDropped)="onLayerDrop($event)">
-          <!-- Groups -->
-          @for (group of groups; track group.id) {
-            <div class="mb-1" cdkDrag [cdkDragDisabled]="false">
-              <div class="flex items-center px-3 py-1.5 gap-2 group/group bg-slate-800/10 hover:bg-slate-800/30 transition-colors cursor-move">
-                <button (click)="group.expanded = !group.expanded" class="text-slate-500 hover:text-slate-300">
-                  <mat-icon class="text-[16px] w-[16px] h-[16px]">{{ group.expanded ? 'expand_more' : 'chevron_right' }}</mat-icon>
-                </button>
-                <mat-icon class="text-[14px] w-[14px] h-[14px] text-amber-500/70">folder</mat-icon>
-                <div class="flex-1 min-w-0">
-                  <span class="text-[10px] font-bold text-slate-500 uppercase truncate block">{{ group.name }}</span>
-                </div>
-                <div class="flex items-center opacity-0 group-hover/group:opacity-100 transition-opacity">
-                  <button (click)="$event.stopPropagation(); removeGroup(group.id)" class="text-rose-500/50 hover:text-rose-500 ml-1">
-                    <mat-icon class="text-[14px] w-[14px] h-[14px]">delete</mat-icon>
-                  </button>
-                </div>
-              </div>
-              
-              @if (group.expanded) {
-                <div class="pl-4 border-l-2 border-slate-800/50 ml-5 mr-2 space-y-0.5 mt-1" cdkDropList [cdkDropListData]="group.layerIds" (cdkDropListDropped)="onNestedLayerDrop($event, group)">
-                  @for (layerId of group.layerIds; track layerId) {
-                    @let nestedLayer = getLayerById(layerId);
-                    @if (nestedLayer) {
-                      <div cdkDrag>
-                        <ng-container [ngTemplateOutlet]="layerRow" [ngTemplateOutletContext]="{ layer: nestedLayer }"></ng-container>
-                      </div>
-                    }
-                  }
-                  @if (group.layerIds.length === 0) {
-                    <div class="text-[9px] text-slate-600 italic py-1">Empty group</div>
-                  }
-                </div>
-              }
-            </div>
-          }
-
-          <!-- Ungrouped Layers Header -->
-          @if (hasUngroupedLayers()) {
-            <div class="px-3 py-1 text-[9px] font-bold text-slate-600 uppercase tracking-widest mt-2 mb-1">Ungrouped</div>
-          }
-
-          @for (layer of layers; track layer.id) {
-            @if (!layer.groupId) {
-              <div cdkDrag>
-                <ng-container [ngTemplateOutlet]="layerRow" [ngTemplateOutletContext]="{ layer: layer }"></ng-container>
-              </div>
-            }
-          }
-        </div>
-      </div>
-
-      <ng-template #layerRow let-layer="layer">
-        <div 
-          class="flex items-center px-3 py-1.5 gap-2 group/layer transition-all border border-transparent mx-2 rounded-lg cursor-pointer hover:bg-slate-800/40"
-          [class.bg-blue-600/20]="activeLayerId === layer.id"
-          [class.border-blue-500/30]="activeLayerId === layer.id"
-          (click)="activeLayerId = layer.id"
-        >
-          <button (click)="$event.stopPropagation(); layer.visible = !layer.visible; saveHistory(); draw()" 
-                  class="text-slate-600 hover:text-blue-400 transition"
-                  [class.text-blue-500]="layer.visible">
-            <mat-icon class="text-[16px] w-[16px] h-[16px]">{{ layer.visible ? 'visibility' : 'visibility_off' }}</mat-icon>
-          </button>
-          <span class="flex-1 text-[11px] font-medium truncate" 
-                [class.text-slate-200]="activeLayerId === layer.id"
-                [class.text-slate-500]="activeLayerId !== layer.id">
-            {{ layer.name }}
-          </span>
-          <div class="flex items-center gap-1 opacity-0 group-hover/layer:opacity-100 transition-opacity">
-            <button (click)="$event.stopPropagation(); openMoveToGroup(layer.id)" class="text-slate-500 hover:text-amber-500" title="Move to group">
-               <mat-icon class="text-[14px] w-[14px] h-[14px]">drive_file_move</mat-icon>
-            </button>
-            @if (layers.length > 1) {
-              <button (click)="$event.stopPropagation(); removeLayer(layer.id)" 
-                      class="text-rose-500/30 hover:text-rose-500">
-                <mat-icon class="text-[14px] w-[14px] h-[14px]">remove_circle</mat-icon>
-              </button>
-            }
-          </div>
-        </div>
-      </ng-template>
-      
-      <!-- Toolbar -->
-      <div class="absolute bottom-8 left-1/2 -translate-x-1/2 z-10 flex items-center space-x-1 bg-slate-900 border border-slate-800 p-1.5 rounded-xl shadow-2xl backdrop-blur-md">
-        @for (tool of tools; track tool.val) {
-          <button 
-            (click)="setMode(tool.val)"
-            [class.bg-slate-800]="mode() === tool.val"
-            [class.text-blue-400]="mode() === tool.val"
-            [class.text-slate-300]="mode() !== tool.val"
-            [class.hover:bg-slate-800]="mode() !== tool.val"
-            class="p-2 rounded-lg transition-colors flex items-center justify-center outline-none focus:ring-1 focus:ring-blue-500"
-            [title]="tool.name"
-          >
-            <mat-icon class="text-[20px] w-[20px] h-[20px]">{{tool.icon}}</mat-icon>
-          </button>
-        }
-        
-        <div class="w-px h-6 bg-slate-800 mx-1 self-center"></div>
-
-        <!-- Color Picker -->
-        <div class="flex items-center space-x-1 px-1">
-           @for (color of colors; track color.val) {
-             <button (click)="currentColor = color.val"
-                     [title]="color.name"
-                     class="w-5 h-5 rounded-full border-2 transition-transform outline-none focus:ring-1 focus:ring-blue-500"
-                     [style.backgroundColor]="color.val"
-                     [class.scale-125]="currentColor === color.val"
-                     [class.border-white]="currentColor === color.val"
-                     [class.border-transparent]="currentColor !== color.val"
-             ></button>
-           }
-        </div>
-
-        <div class="w-px h-6 bg-slate-800 mx-1 self-center"></div>
-
-        <!-- Width Picker -->
-        <div class="flex items-center space-x-1 px-1 text-slate-300">
-           @for (width of widths; track width.val) {
-             <button (click)="currentWidth = width.val"
-                     [title]="width.name"
-                     class="w-6 h-6 flex items-center justify-center rounded transition-colors hover:bg-slate-800 outline-none focus:ring-1 focus:ring-blue-500"
-                     [class.bg-slate-700]="currentWidth === width.val"
-             >
-                <div class="bg-current rounded-full" [style.width.px]="width.val" [style.height.px]="width.val"></div>
-             </button>
-           }
-        </div>
-
-        <div class="w-px h-6 bg-slate-800 mx-1 self-center"></div>
-
-        <!-- Font Picker -->
-        <select (change)="currentFont = $any($event.target).value" class="bg-slate-800 text-slate-300 text-xs rounded p-1 border-none outline-none cursor-pointer focus:ring-1 focus:ring-blue-500 max-w-[80px]">
-           @for (font of fonts; track font.val) {
-             <option [value]="font.val" [selected]="currentFont === font.val">{{font.name}}</option>
-           }
-        </select>
-
-        <div class="w-px h-6 bg-slate-800 mx-1 self-center"></div>
-        
-        <button (click)="clear()" class="p-2 rounded-lg transition-colors flex items-center justify-center outline-none text-rose-400/80 hover:bg-slate-800 hover:text-rose-400" title="Clear Board">
-          <mat-icon class="text-[20px] w-[20px] h-[20px]">delete_outline</mat-icon>
-        </button>
-      </div>
-
-      <!-- Canvas -->
+      <!-- Canvas Layer -->
       <canvas #canvas 
-        class="absolute inset-0 w-full h-full touch-none"
+        class="absolute inset-0 w-full h-full touch-none z-0"
         [class.cursor-crosshair]="mode() !== 'select'"
         [class.cursor-default]="mode() === 'select'"
         style="background: transparent;"
@@ -255,8 +58,230 @@ interface LayerGroup {
         (window:touchend)="onPointerUp()">
       </canvas>
 
+      @if (textInput.visible) {
+        <input 
+          #textInputField
+          type="text"
+          class="absolute z-50 bg-slate-900/80 backdrop-blur-md outline-none border border-blue-500/50 focus:border-blue-500 border-dashed rounded px-3 py-1 shadow-2xl text-white"
+          [style.left.px]="textInput.x"
+          [style.top.px]="textInput.y - 20"
+          [style.font]="currentFont"
+          [style.color]="currentColor"
+          placeholder="Type label..."
+          (keydown.enter)="commitText($any($event).target.value)"
+          (blur)="commitText($any($event).target.value)"
+        />
+      }
+
+      <!-- Floating Toolbars -->
+      
+      <!-- History & Global Actions -->
+      <div class="absolute top-6 left-6 z-20 flex flex-col gap-4">
+        <div class="flex items-center gap-1 glass-panel p-1.5 rounded-2xl animate-in slide-in-from-left duration-500">
+          <button (click)="undo()" [disabled]="historyIndex <= 0" 
+                  class="p-2.5 rounded-xl text-slate-400 hover:text-white hover:bg-white/5 disabled:opacity-20 transition-all">
+            <mat-icon class="text-[20px]">undo</mat-icon>
+          </button>
+          <div class="w-px h-5 bg-white/5 mx-1"></div>
+          <button (click)="redo()" [disabled]="historyIndex >= history.length - 1" 
+                  class="p-2.5 rounded-xl text-slate-400 hover:text-white hover:bg-white/5 disabled:opacity-20 transition-all">
+            <mat-icon class="text-[20px]">redo</mat-icon>
+          </button>
+        </div>
+        
+        @if (selectedShape) {
+          <div class="flex items-center gap-2 glass-panel p-1.5 rounded-2xl border-rose-500/20 animate-in zoom-in duration-300">
+            <button (click)="deleteSelected()" 
+                    class="flex items-center gap-2 px-4 py-2 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 rounded-xl transition-all font-bold text-xs uppercase tracking-widest">
+              <mat-icon class="text-[18px]">delete</mat-icon>
+              Remove
+            </button>
+          </div>
+        }
+      </div>
+
+      <!-- Layers & Library Sidebar -->
+      <div class="absolute top-6 right-6 z-20 w-72 flex flex-col glass-panel rounded-3xl overflow-hidden animate-in slide-in-from-right duration-500 max-h-[calc(100vh-120px)] border border-white/5">
+        
+        <div class="flex border-b border-white/5 bg-white/5">
+           <button (click)="sidebarTab.set('layers')" class="flex-1 py-3 text-[10px] font-bold uppercase tracking-widest transition-all" [class.text-blue-400]="sidebarTab() === 'layers'" [class.text-slate-500]="sidebarTab() !== 'layers'">Layers</button>
+           <button (click)="sidebarTab.set('library')" class="flex-1 py-3 text-[10px] font-bold uppercase tracking-widest transition-all" [class.text-blue-400]="sidebarTab() === 'library'" [class.text-slate-500]="sidebarTab() !== 'library'">Components</button>
+        </div>
+
+        @if (sidebarTab() === 'layers') {
+          <div class="p-4 flex items-center justify-between border-b border-white/5 bg-white/5">
+            <div class="flex items-center gap-2">
+              <mat-icon class="text-blue-400 text-sm">layers</mat-icon>
+              <span class="text-[10px] font-bold text-slate-300 uppercase tracking-[0.2em]">Hierarchy</span>
+            </div>
+            <div class="flex gap-2">
+              <button (click)="addGroup()" class="p-1.5 text-slate-400 hover:text-amber-400 transition" title="New Group">
+                <mat-icon class="text-[18px]">create_new_folder</mat-icon>
+              </button>
+              <button (click)="addLayer()" class="p-1.5 text-slate-400 hover:text-blue-400 transition" title="New Layer">
+                <mat-icon class="text-[18px]">add_box</mat-icon>
+              </button>
+            </div>
+          </div>
+          
+          <div class="flex-1 overflow-y-auto pt-4 pb-6 custom-scrollbar" cdkDropList (cdkDropListDropped)="onLayerDrop($event)">
+            <!-- Groups -->
+            @for (group of groups; track group.id) {
+              <div class="mb-2 px-3" cdkDrag>
+                <div class="flex items-center p-3 gap-3 group/group glass-card rounded-2xl hover:bg-white/10 transition-colors cursor-grab active:cursor-grabbing border-white/5">
+                  <button (click)="group.expanded = !group.expanded" class="text-slate-500 hover:text-slate-300">
+                    <mat-icon class="text-[18px]">{{ group.expanded ? 'keyboard_arrow_down' : 'keyboard_arrow_right' }}</mat-icon>
+                  </button>
+                  <div class="flex-1 min-w-0">
+                    <span class="text-[11px] font-bold text-slate-200 uppercase truncate block tracking-wide">{{ group.name }}</span>
+                  </div>
+                  <button (click)="$event.stopPropagation(); removeGroup(group.id)" class="opacity-0 group-hover/group:opacity-100 transition-opacity text-slate-500 hover:text-rose-400">
+                    <mat-icon class="text-[16px]">delete</mat-icon>
+                  </button>
+                </div>
+                
+                @if (group.expanded) {
+                  <div class="mt-2 ml-4 pl-4 border-l border-white/10 space-y-2" cdkDropList [cdkDropListData]="group.layerIds" (cdkDropListDropped)="onNestedLayerDrop($event, group)">
+                    @for (layerId of group.layerIds; track layerId) {
+                      @let nestedLayer = getLayerById(layerId);
+                      @if (nestedLayer) {
+                        <div cdkDrag>
+                          <ng-container [ngTemplateOutlet]="layerRow" [ngTemplateOutletContext]="{ layer: nestedLayer }"></ng-container>
+                        </div>
+                      }
+                    }
+                  </div>
+                }
+              </div>
+            }
+
+            <div class="px-6 py-2">
+              @if (hasUngroupedLayers()) {
+                <div class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-3 opacity-50">Base Layers</div>
+              }
+              @for (layer of layers; track layer.id) {
+                @if (!layer.groupId) {
+                  <div cdkDrag class="mb-2 last:mb-0">
+                    <ng-container [ngTemplateOutlet]="layerRow" [ngTemplateOutletContext]="{ layer: layer }"></ng-container>
+                  </div>
+                }
+              }
+            </div>
+          </div>
+        } @else {
+          <!-- Component Library -->
+          <div class="flex-1 overflow-y-auto p-5 custom-scrollbar">
+            <div class="grid grid-cols-2 gap-3">
+              @for (node of nodeLibrary; track node.name) {
+                <button (click)="addNode(node)" class="flex flex-col items-center gap-2 p-4 glass-card rounded-2xl hover:bg-white/10 group transition-all">
+                  <div class="w-10 h-10 bg-white/5 rounded-xl flex items-center justify-center group-hover:scale-110 transition">
+                    <mat-icon class="text-blue-400">{{node.icon}}</mat-icon>
+                  </div>
+                  <span class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{{node.name}}</span>
+                </button>
+              }
+            </div>
+          </div>
+        }
+      </div>
+
+      <ng-template #layerRow let-layer="layer">
+        <div 
+          class="flex items-center p-3 gap-3 group/layer transition-all border border-transparent rounded-2xl cursor-pointer"
+          [class.bg-blue-600/30]="activeLayerId === layer.id"
+          [class.border-blue-500/20]="activeLayerId === layer.id"
+          [class.bg-white/5]="activeLayerId !== layer.id"
+          [class.hover:bg-white/10]="activeLayerId !== layer.id"
+          (click)="activeLayerId = layer.id"
+        >
+          <button (click)="$event.stopPropagation(); layer.visible = !layer.visible; saveHistory(); draw()" 
+                  class="text-slate-500 transition"
+                  [class.text-blue-400]="layer.visible">
+            <mat-icon class="text-[18px]">{{ layer.visible ? 'visibility' : 'visibility_off' }}</mat-icon>
+          </button>
+          
+          <span class="flex-1 text-[11px] font-medium truncate tracking-wide" 
+                [class.text-white]="activeLayerId === layer.id"
+                [class.text-slate-400]="activeLayerId !== layer.id">
+            {{ layer.name }}
+          </span>
+          
+          <div class="flex items-center gap-1 opacity-0 group-hover/layer:opacity-100 transition-opacity">
+            <button (click)="$event.stopPropagation(); openMoveToGroup(layer.id)" class="text-slate-500 hover:text-amber-400">
+               <mat-icon class="text-[16px]">folder_shared</mat-icon>
+            </button>
+            @if (layers.length > 1) {
+              <button (click)="$event.stopPropagation(); removeLayer(layer.id)" class="text-slate-500 hover:text-rose-400">
+                <mat-icon class="text-[16px]">remove_circle</mat-icon>
+              </button>
+            }
+          </div>
+        </div>
+      </ng-template>
+      
+      <!-- Main Bottom Toolbar -->
+      <div class="absolute bottom-10 left-1/2 -translate-x-1/2 z-10 flex items-center p-2 glass-panel rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] border border-white/10 animate-in slide-in-from-bottom duration-700">
+        <div class="flex items-center bg-white/5 rounded-2xl p-1 shrink-0">
+          @for (tool of tools; track tool.val) {
+            <button 
+              (click)="setMode(tool.val)"
+              [class.bg-blue-600]="mode() === tool.val"
+              [class.text-white]="mode() === tool.val"
+              [class.shadow-lg]="mode() === tool.val"
+              [class.shadow-blue-600/40]="mode() === tool.val"
+              [class.text-slate-400]="mode() !== tool.val"
+              [class.hover:text-white]="mode() !== tool.val"
+              [class.hover:bg-white/5]="mode() !== tool.val"
+              class="w-10 h-10 rounded-xl transition-all flex items-center justify-center outline-none relative group"
+              [title]="tool.name"
+            >
+              <mat-icon class="text-[20px]">{{tool.icon}}</mat-icon>
+              @if (mode() === tool.val) {
+                <div class="absolute -bottom-1 w-1 h-1 bg-white rounded-full"></div>
+              }
+            </button>
+          }
+        </div>
+        
+        <div class="w-px h-8 bg-white/10 mx-3"></div>
+
+        <!-- Color Palette -->
+        <div class="flex items-center gap-2 px-2 shrink-0">
+           @for (color of colors; track color.val) {
+             <button (click)="currentColor = color.val"
+                     class="w-6 h-6 rounded-full border-2 transition-all hover:scale-125 hover:shadow-lg"
+                     [style.backgroundColor]="color.val"
+                     [style.borderColor]="currentColor === color.val ? 'white' : 'transparent'"
+                     [class.scale-125]="currentColor === color.val"
+             ></button>
+           }
+        </div>
+
+        <div class="w-px h-8 bg-white/10 mx-3"></div>
+
+        <!-- Stroke Width -->
+        <div class="flex items-center gap-1 px-1 text-slate-400 shrink-0">
+           @for (width of widths; track width.val) {
+             <button (click)="currentWidth = width.val"
+                     class="w-8 h-8 flex items-center justify-center rounded-xl transition-all hover:bg-white/10"
+                     [class.bg-white/10]="currentWidth === width.val"
+                     [class.text-blue-400]="currentWidth === width.val"
+             >
+                <div class="bg-current rounded-full" [style.width.px]="width.val" [style.height.px]="width.val"></div>
+             </button>
+           }
+        </div>
+
+        <div class="w-px h-8 bg-white/10 mx-3"></div>
+
+        <!-- Utility -->
+        <button (click)="clear()" class="w-10 h-10 rounded-xl transition-all flex items-center justify-center text-rose-500/50 hover:bg-rose-500/10 hover:text-rose-400" title="Clear Board">
+          <mat-icon class="text-[20px]">delete_sweep</mat-icon>
+        </button>
+      </div>
+
     </div>
-  `
+  `,
 })
 export class WhiteboardComponent implements AfterViewInit {
   @ViewChild('canvas') canvasRef!: ElementRef<HTMLCanvasElement>;
@@ -298,6 +323,19 @@ export class WhiteboardComponent implements AfterViewInit {
   activeLayerId = 'l1';
   selectedShape: { shape: Shape, layerId: string } | null = null;
   dragStartPos = { x: 0, y: 0 };
+  
+  sidebarTab = signal<'layers' | 'library'>('layers');
+  
+  nodeLibrary = [
+    { name: 'Load Balancer', icon: 'alt_route', type: 'rect', color: '#6366f1' },
+    { name: 'Database', icon: 'storage', type: 'circle', color: '#f59e0b' },
+    { name: 'Cache', icon: 'bolt', type: 'rect', color: '#10b981' },
+    { name: 'Server', icon: 'dns', type: 'rect', color: '#3b82f6' },
+    { name: 'CDN', icon: 'public', type: 'circle', color: '#ec4899' },
+    { name: 'Message Queue', icon: 'swap_horiz', type: 'rect', color: '#8b5cf6' },
+    { name: 'User', icon: 'person', type: 'circle', color: '#94a3b8' },
+    { name: 'Firewall', icon: 'security', type: 'rect', color: '#ef4444' }
+  ];
 
   // History system
   history: { layers: Layer[], groups: LayerGroup[] }[] = [];
@@ -334,6 +372,55 @@ export class WhiteboardComponent implements AfterViewInit {
       shapes: []
     });
     this.activeLayerId = id;
+    this.saveHistory();
+  }
+
+  addNode(node: any) {
+    const id = 's' + Date.now();
+    const centerX = 400;
+    const centerY = 300;
+    
+    // Create correct shape type based on node
+    let container: Shape;
+    if (node.type === 'circle') {
+      container = {
+        id,
+        type: 'circle',
+        x: centerX,
+        y: centerY,
+        radius: 40,
+        color: node.color,
+        strokeWidth: 2,
+        opacity: 0.2
+      };
+    } else {
+      container = {
+        id,
+        type: 'rect',
+        x: centerX - 40,
+        y: centerY - 40,
+        width: 80,
+        height: 80,
+        color: node.color,
+        strokeWidth: 2,
+        opacity: 0.2
+      };
+    }
+
+    // Add a label
+    const label: Shape = {
+      id: id + '_label',
+      type: 'text',
+      x: centerX,
+      y: centerY + 55,
+      color: '#ffffff',
+      strokeWidth: 1,
+      text: node.name,
+      font: '500 10px "Inter", sans-serif'
+    };
+
+    this.activeLayer.shapes.push(container, label);
+    this.draw();
     this.saveHistory();
   }
 
@@ -570,12 +657,18 @@ export class WhiteboardComponent implements AfterViewInit {
     if (this.currentShape) this.renderShape(this.currentShape);
   }
 
-  renderShape(shape: Shape) {
+  renderShape(shape: any) {
     this.ctx.strokeStyle = shape.color;
-    this.ctx.lineWidth = shape.width;
+    this.ctx.lineWidth = shape.strokeWidth;
     this.ctx.fillStyle = shape.color;
     this.ctx.lineCap = 'round';
     this.ctx.lineJoin = 'round';
+    
+    if (shape.opacity !== undefined) {
+      this.ctx.globalAlpha = shape.opacity;
+    } else {
+      this.ctx.globalAlpha = 1.0;
+    }
 
     if (shape === this.selectedShape?.shape) {
       this.ctx.setLineDash([5, 5]);
@@ -588,15 +681,17 @@ export class WhiteboardComponent implements AfterViewInit {
     if (shape.type === 'path') {
       if (shape.path.length > 0) {
         this.ctx.moveTo(shape.path[0].x, shape.path[0].y);
-        shape.path.forEach(p => this.ctx.lineTo(p.x, p.y));
+        shape.path.forEach((p: any) => this.ctx.lineTo(p.x, p.y));
         this.ctx.stroke();
       }
     } else if (shape.type === 'rect') {
-      this.ctx.rect(shape.x, shape.y, shape.w, shape.h);
+      this.ctx.rect(shape.x, shape.y, shape.width, shape.height);
       this.ctx.stroke();
+      if (shape.opacity !== undefined) this.ctx.fill();
     } else if (shape.type === 'circle') {
-      this.ctx.arc(shape.x, shape.y, shape.r, 0, Math.PI * 2);
+      this.ctx.arc(shape.x, shape.y, shape.radius, 0, Math.PI * 2);
       this.ctx.stroke();
+      if (shape.opacity !== undefined) this.ctx.fill();
     } else if (shape.type === 'line') {
       this.ctx.moveTo(shape.x1, shape.y1);
       this.ctx.lineTo(shape.x2, shape.y2);
@@ -606,6 +701,7 @@ export class WhiteboardComponent implements AfterViewInit {
       this.ctx.fillText(shape.text, shape.x, shape.y);
     }
     this.ctx.setLineDash([]);
+    this.ctx.globalAlpha = 1.0;
   }
 
   setMode(m: ShapeMode) {
@@ -625,7 +721,7 @@ export class WhiteboardComponent implements AfterViewInit {
         text: val.trim(), 
         color: this.currentColor, 
         font: this.currentFont,
-        width: 2
+        strokeWidth: 2
       });
       this.saveHistory();
       this.draw();
@@ -654,11 +750,11 @@ export class WhiteboardComponent implements AfterViewInit {
     this.isDrawing = true;
     const m = this.mode();
     const id = 's' + Date.now();
-    if (m === 'pen') this.currentShape = { id, type: 'path', path: [{x, y}], color: this.currentColor, width: this.currentWidth };
-    else if (m === 'eraser') this.currentShape = { id, type: 'path', path: [{x, y}], color: '#020617', width: 20 };
-    else if (m === 'rect') this.currentShape = { id, type: 'rect', x, y, w: 0, h: 0, color: this.currentColor, width: this.currentWidth };
-    else if (m === 'circle') this.currentShape = { id, type: 'circle', x, y, r: 0, color: this.currentColor, width: this.currentWidth };
-    else if (m === 'line') this.currentShape = { id, type: 'line', x1: x, y1: y, x2: x, y2: y, color: this.currentColor, width: this.currentWidth };
+    if (m === 'pen') this.currentShape = { id, type: 'path', path: [{x, y}], color: this.currentColor, strokeWidth: this.currentWidth };
+    else if (m === 'eraser') this.currentShape = { id, type: 'path', path: [{x, y}], color: '#020617', strokeWidth: 20 };
+    else if (m === 'rect') this.currentShape = { id, type: 'rect', x, y, width: 0, height: 0, color: this.currentColor, strokeWidth: this.currentWidth };
+    else if (m === 'circle') this.currentShape = { id, type: 'circle', x, y, radius: 0, color: this.currentColor, strokeWidth: this.currentWidth };
+    else if (m === 'line') this.currentShape = { id, type: 'line', x1: x, y1: y, x2: x, y2: y, color: this.currentColor, strokeWidth: this.currentWidth };
     else if (m === 'text') {
       this.textInput = { visible: true, x, y, text: '' };
       setTimeout(() => (document.querySelector('input.z-50') as HTMLInputElement)?.focus(), 0);
@@ -684,8 +780,8 @@ export class WhiteboardComponent implements AfterViewInit {
   }
 
   isHit(s: Shape, x: number, y: number): boolean {
-    if (s.type === 'rect') return x >= s.x && x <= s.x + s.w && y >= s.y && y <= s.y + s.h;
-    if (s.type === 'circle') return Math.sqrt((x - s.x)**2 + (y - s.y)**2) <= s.r + 5;
+    if (s.type === 'rect') return x >= s.x && x <= s.x + s.width && y >= s.y && y <= s.y + s.height;
+    if (s.type === 'circle') return Math.sqrt((x - s.x)**2 + (y - s.y)**2) <= s.radius + 5;
     if (s.type === 'text') return Math.abs(x - s.x) < 50 && Math.abs(y - s.y) < 20;
     if (s.type === 'line') {
       const dist = Math.abs((s.y2 - s.y1)*x - (s.x2 - s.x1)*y + s.x2*s.y1 - s.y2*s.x1) / Math.sqrt((s.y2-s.y1)**2 + (s.x2-s.x1)**2);
@@ -714,8 +810,8 @@ export class WhiteboardComponent implements AfterViewInit {
     if (!this.currentShape) return;
     const m = this.mode();
     if (m === 'pen' || m === 'eraser') this.currentShape.path.push({x, y});
-    else if (m === 'rect') { this.currentShape.w = x - this.currentShape.x; this.currentShape.h = y - this.currentShape.y; }
-    else if (m === 'circle') this.currentShape.r = Math.sqrt((x - this.currentShape.x)**2 + (y - this.currentShape.y)**2);
+    else if (m === 'rect') { this.currentShape.width = x - this.currentShape.x; this.currentShape.height = y - this.currentShape.y; }
+    else if (m === 'circle') this.currentShape.radius = Math.sqrt((x - this.currentShape.x)**2 + (y - this.currentShape.y)**2);
     else if (m === 'line') { this.currentShape.x2 = x; this.currentShape.y2 = y; }
     this.draw();
   }

@@ -8,155 +8,156 @@ import { SystemDesignScenario } from './knowledge-base';
   standalone: true,
   imports: [MatIconModule],
   template: `
-    <aside class="w-80 bg-slate-900 border-l border-slate-800 flex flex-col h-full text-sm relative">
+    <aside class="flex flex-col h-full text-sm relative glass-panel border-0">
+      
       <!-- Header -->
-      <div class="p-5 border-b border-slate-800 flex justify-between items-center shrink-0">
-        <div class="flex items-center gap-2 text-slate-300 font-medium tracking-wide">
-          <mat-icon class="text-blue-500 text-[20px] h-[20px] w-[20px]">smart_toy</mat-icon>
-          AI Copilot
+      <div class="p-6 border-b border-white/5 flex justify-between items-center shrink-0">
+        <div class="flex items-center gap-3">
+          <div class="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
+            <mat-icon class="text-blue-400 text-[18px]">smart_toy</mat-icon>
+          </div>
+          <div>
+            <div class="text-xs font-bold text-slate-100 tracking-wider">AI COPILOT</div>
+            <div class="text-[9px] text-slate-500 font-mono flex items-center gap-1">
+              <div class="w-1 h-1 rounded-full bg-emerald-500"></div>
+              {{ aiService.isOfflineMode() ? 'OFFLINE READY' : 'GEMINI ACTIVE' }}
+            </div>
+          </div>
         </div>
-        <div class="flex items-center gap-2">
-           <button class="text-slate-500 hover:text-blue-400 transition-colors outline-none" (click)="showSettings = true" title="Settings">
-             <mat-icon class="text-[20px] h-[20px] w-[20px]">settings</mat-icon>
+        <div class="flex items-center gap-1">
+           <button class="p-2 text-slate-500 hover:text-white hover:bg-white/5 rounded-lg transition-all" (click)="showSettings = true">
+             <mat-icon class="text-[20px]">settings</mat-icon>
            </button>
-           <button 
-             class="text-slate-500 hover:text-blue-400 transition-colors outline-none" 
-             (click)="toggleOffline()"
-             [title]="'Current: ' + (aiService.isOfflineMode() ? 'Offline (Fast)' : 'Online (Gemini)')"
-           >
-             <mat-icon class="text-[20px] h-[20px] w-[20px]">{{ aiService.isOfflineMode() ? 'cloud_off' : 'cloud_queue' }}</mat-icon>
+           <button class="p-2 text-slate-500 hover:text-white hover:bg-white/5 rounded-lg transition-all" (click)="toggleOffline()">
+             <mat-icon class="text-[20px]">{{ aiService.isOfflineMode() ? 'cloud_off' : 'cloud_queue' }}</mat-icon>
            </button>
         </div>
       </div>
-
+ 
       <!-- Chat Area -->
-      <div class="flex-1 overflow-y-auto p-4 space-y-4 font-sans" #scrollContainer>
+      <div class="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar" #scrollContainer>
         @if (aiService.messages().length === 0) {
-           <div class="text-slate-500 flex flex-col items-center justify-center h-full gap-3 opacity-60">
-             <mat-icon class="text-4xl w-10 h-10">waving_hand</mat-icon>
-             <p class="text-center px-4 text-xs leading-relaxed">I'm your System Design Interview assistant. Tell me about your architecture!</p>
+           <div class="flex flex-col items-center justify-center h-full text-center space-y-4 opacity-40">
+             <mat-icon class="text-6xl text-slate-600">forum</mat-icon>
+             <p class="text-[11px] leading-relaxed max-w-[200px]">How can I assist your system design today?</p>
              
              @if (activeScenario()) {
-               <div class="flex flex-col gap-2 mt-4 items-stretch w-full max-w-[200px]">
-                 <button (click)="aiService.sendMessage('Explain theory', '', activeScenario()?.id)" class="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded text-[11px] text-emerald-400 hover:bg-slate-700 transition">Explain Theory</button>
-                 <button (click)="aiService.sendMessage('List components', '', activeScenario()?.id)" class="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded text-[11px] text-emerald-400 hover:bg-slate-700 transition">List Components</button>
-                 <button (click)="aiService.sendMessage('Show bottlenecks', '', activeScenario()?.id)" class="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded text-[11px] text-emerald-400 hover:bg-slate-700 transition">Show Bottlenecks</button>
-                 <button (click)="aiService.sendMessage('Diagram hints', '', activeScenario()?.id)" class="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded text-[11px] text-emerald-400 hover:bg-slate-700 transition">Diagram Hints</button>
-               </div>
+                <div class="grid grid-cols-1 gap-2 w-full pt-4">
+                  <button (click)="aiService.sendMessage('Explain the theory behind ' + activeScenario()?.title, '', activeScenario()?.id)" class="px-4 py-2 bg-white/5 border border-white/5 rounded-xl text-[10px] text-slate-400 hover:bg-white/10 transition">Explain Theory</button>
+                  <button (click)="aiService.sendMessage('List critical components for ' + activeScenario()?.title, '', activeScenario()?.id)" class="px-4 py-2 bg-white/5 border border-white/5 rounded-xl text-[10px] text-slate-400 hover:bg-white/10 transition">List Components</button>
+                </div>
              }
            </div>
         }
-
+ 
         @for (msg of aiService.messages(); track $index) {
-          <div [class]="msg.role === 'user' ? 'text-right' : 'text-left'">
+          <div [class]="msg.role === 'user' ? 'flex flex-col items-end' : 'flex flex-col items-start'">
             <div 
-              class="inline-block px-3 py-2 rounded-lg max-w-[90%] text-left whitespace-pre-wrap leading-relaxed shadow-sm text-xs border"
+              class="px-4 py-3 rounded-2xl max-w-[90%] text-xs leading-relaxed transition-all shadow-xl"
               [class.bg-blue-600]="msg.role === 'user'"
-              [class.bg-slate-800/50]="msg.role === 'assistant'"
               [class.text-white]="msg.role === 'user'"
-              [class.text-slate-300]="msg.role === 'assistant'"
-              [class.border-blue-500]="msg.role === 'user'"
-              [class.border-slate-700/50]="msg.role === 'assistant'"
+              [class.glass-card]="msg.role === 'assistant'"
+              [class.text-slate-200]="msg.role === 'assistant'"
+              [class.rounded-tr-none]="msg.role === 'user'"
+              [class.rounded-tl-none]="msg.role === 'assistant'"
             >
               {{msg.text}}
             </div>
+            <div class="text-[8px] text-slate-600 mt-1 uppercase font-mono px-1">
+              {{ msg.role === 'user' ? 'YOU' : 'COPILOT' }}
+            </div>
           </div>
         }
-
+ 
         @if (aiService.isProcessing()) {
-          <div class="flex items-center gap-2 text-slate-500">
-            <mat-icon class="animate-spin text-[16px] h-[16px] w-[16px]">hourglass_empty</mat-icon>
-            <span class="text-[11px]">Thinking...</span>
+          <div class="flex items-center gap-3 text-blue-400 animate-pulse px-2">
+            <div class="flex gap-1">
+              <div class="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+              <div class="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+              <div class="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce"></div>
+            </div>
+            <span class="text-[10px] font-bold tracking-widest">ANALYZING</span>
           </div>
         }
       </div>
-
+ 
       <!-- Input Area -->
-      <div class="mt-auto p-4 bg-slate-950 border-t border-slate-800 shrink-0">
-        <div class="mb-3 flex items-center space-x-2">
-          <div class="w-2 h-2 rounded-full" [class.bg-blue-500]="!aiService.isOfflineMode() && !aiService.lmConfig().enabled" [class.bg-emerald-500]="aiService.lmConfig().enabled" [class.bg-slate-500]="aiService.isOfflineMode() && !aiService.lmConfig().enabled"></div>
-          <span class="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">{{ aiService.lmConfig().enabled ? 'LM Studio' : (aiService.isOfflineMode() ? 'Offline Mode' : 'Gemini AI') }}</span>
-        </div>
-        <form class="relative" (submit)="onSubmit($event)">
+      <div class="p-6 bg-white/5 backdrop-blur-md border-t border-white/5 shrink-0">
+        <form class="relative group" (submit)="onSubmit($event)">
           <input 
             type="text" 
             #msgInput
-            placeholder="Ask about the design..." 
-            class="w-full bg-slate-900 border border-slate-700 text-xs text-slate-200 rounded-lg pl-3 pr-10 py-2.5 focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder:text-slate-500"
+            placeholder="Architecture query..." 
+            class="w-full glass-input pl-4 pr-12 py-3.5 text-xs text-white"
           >
           <button 
             type="submit"
             [disabled]="aiService.isProcessing()"
-            class="absolute right-2 top-2 text-slate-500 hover:text-blue-400 disabled:opacity-50 transition-colors"
+            class="absolute right-2 top-1.5 w-10 h-10 flex items-center justify-center text-blue-500 hover:text-blue-400 hover:bg-blue-500/10 rounded-xl transition-all disabled:opacity-30"
           >
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"/></svg>
+            <mat-icon>send</mat-icon>
           </button>
         </form>
       </div>
-
-      <!-- Settings Modal -->
+ 
+      <!-- Settings Overlay (Simplified) -->
       @if (showSettings) {
-        <div class="absolute inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 shadow-2xl">
-          <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl w-full max-w-sm flex flex-col relative z-20">
-             <div class="flex items-center justify-between mb-4">
-               <h3 class="text-white font-medium text-sm">AI Settings</h3>
-               <button (click)="showSettings = false" class="text-slate-400 hover:text-white"><mat-icon class="text-[20px] w-[20px] h-[20px]">close</mat-icon></button>
-             </div>
+        <div class="absolute inset-0 z-50 bg-slate-950/90 backdrop-blur-xl flex flex-col p-8 animate-in fade-in duration-300">
+           <div class="flex items-center justify-between mb-8">
+             <h3 class="text-lg font-bold text-white tracking-tight">Copilot Engine</h3>
+             <button (click)="showSettings = false" class="p-2 text-slate-500 hover:text-white rounded-lg transition-all"><mat-icon>close</mat-icon></button>
+           </div>
+ 
+           <div class="flex-1 space-y-8 overflow-y-auto custom-scrollbar">
+              <div class="space-y-4">
+                 <label class="flex items-center justify-between p-4 glass-card rounded-2xl cursor-pointer group">
+                   <div class="flex items-center gap-3">
+                     <div class="p-2 bg-purple-500/10 rounded-lg group-hover:bg-purple-500/20 transition-all text-purple-400">
+                       <mat-icon>dns</mat-icon>
+                     </div>
+                     <span class="text-xs font-bold text-slate-200">Local LLM Interface</span>
+                   </div>
+                   <input type="checkbox" [checked]="aiService.lmConfig().enabled" (change)="toggleLmStudio($event)" class="w-10 h-5 appearance-none bg-slate-800 rounded-full relative cursor-pointer checked:bg-blue-600 transition-all after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-4 after:h-4 after:bg-white after:rounded-full after:transition-all checked:after:translate-x-5">
+                 </label>
+                 
+                 @if (aiService.lmConfig().enabled) {
+                   <div class="space-y-4 animate-in slide-in-from-top-4 duration-300">
+                     <div>
+                       <label class="block text-[10px] text-slate-500 font-bold uppercase mb-2 ml-1">Endpoint API</label>
+                       <input type="text" [value]="aiService.lmConfig().endpoint" (change)="updateEndpoint($event)" class="w-full glass-input px-4 py-3 text-xs">
+                     </div>
+                     <div>
+                       <label class="block text-[10px] text-slate-500 font-bold uppercase mb-2 ml-1">Preferred Model</label>
+                       @if (aiService.availableModels().length > 0) {
+                         <select (change)="updateModel($event)" class="w-full glass-input px-4 py-3 text-xs appearance-none">
+                           @for (model of aiService.availableModels(); track model) {
+                              <option [value]="model" [selected]="aiService.lmConfig().model === model">{{model}}</option>
+                           }
+                         </select>
+                       } @else {
+                         <input type="text" [value]="aiService.lmConfig().model" (input)="updateModel($event)" class="w-full glass-input px-4 py-3 text-xs">
+                       }
+                     </div>
+                   </div>
+                 }
+              </div>
+           </div>
 
-             <div class="space-y-4">
-                <label class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
-                  <input type="checkbox" [checked]="aiService.lmConfig().enabled" (change)="toggleLmStudio($event)" class="rounded bg-slate-800 border-slate-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-slate-900">
-                  Enable Local LLM (LM Studio)
-                </label>
-                
-                @if (aiService.lmConfig().enabled) {
-                  <div class="space-y-3 pt-2">
-                    <div>
-                      <label for="endpoint-input" class="block text-[10px] uppercase text-slate-500 mb-1 tracking-wider font-semibold">Endpoint (Requires CORS)</label>
-                      <input id="endpoint-input" type="text" [value]="aiService.lmConfig().endpoint" (change)="updateEndpoint($event)" class="w-full bg-slate-950 border border-slate-700 text-slate-200 text-xs px-2 py-1.5 rounded focus:outline-none focus:border-blue-500 transition-colors">
-                    </div>
-                    <div>
-                      <label class="block text-[10px] uppercase text-slate-500 mb-1 tracking-wider font-semibold">Model Name</label>
-                      @if (aiService.availableModels().length > 0) {
-                        <select (change)="updateModel($event)" class="w-full bg-slate-950 border border-slate-700 text-slate-200 text-xs px-2 py-1.5 rounded flex outline-none focus:border-blue-500 cursor-pointer text-ellipsis overflow-hidden pr-6">
-                          @for (model of aiService.availableModels(); track model) {
-                             <option [value]="model" [selected]="aiService.lmConfig().model === model">{{model}}</option>
-                          }
-                        </select>
-                      } @else {
-                        <input id="model-input" type="text" [value]="aiService.lmConfig().model" (input)="updateModel($event)" class="w-full bg-slate-950 border border-slate-700 text-slate-200 text-xs px-2 py-1.5 rounded focus:outline-none focus:border-blue-500 transition-colors" placeholder="e.g. local-model">
-                        <div class="mt-2 p-3 bg-indigo-950/40 border border-indigo-900/60 rounded-lg flex flex-col gap-1.5">
-                          <span class="text-[11px] text-indigo-300 font-bold tracking-wide flex items-center gap-1.5"><mat-icon class="text-[14px] w-[14px] h-[14px]">lightbulb</mat-icon> No models detected</span>
-                          <span class="text-[10px] text-indigo-400/80 leading-relaxed">Download recommended offline models in LM Studio:</span>
-                          <ul class="text-[10px] text-indigo-200 list-disc list-inside space-y-0.5 mt-0.5 ml-1">
-                            <li>Llama-3-8B-Instruct</li>
-                            <li>Phi-3-Mini-4k-Instruct</li>
-                            <li>Gemma-2B-IT</li>
-                          </ul>
-                        </div>
-                      }
-                    </div>
-                    <div>
-                      <label for="temperature-input" class="block text-[10px] uppercase text-slate-500 mb-1 tracking-wider font-semibold">Temperature ({{aiService.lmConfig().temperature}})</label>
-                      <input id="temperature-input" type="range" min="0" max="2" step="0.1" [value]="aiService.lmConfig().temperature" (input)="updateTemperature($event)" class="w-full accent-blue-500">
-                    </div>
-                    <div>
-                      <button (click)="testLmStudio()" class="w-full py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded text-slate-300 text-xs transition-colors font-medium">Test Connection</button>
-                      @if (testResult) {
-                         <p class="text-[10px] mt-2 whitespace-pre-wrap" [class.text-emerald-400]="testSuccess" [class.text-rose-400]="!testSuccess">{{testResult}}</p>
-                      }
-                    </div>
-                  </div>
-                }
-             </div>
-             <div class="mt-6 flex justify-end">
-                <button class="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 rounded text-white text-xs font-medium transition-colors" (click)="showSettings = false">Done</button>
-             </div>
-          </div>
+           <div class="pt-8 flex flex-col gap-3">
+              <button (click)="testLmStudio()" [disabled]="!aiService.lmConfig().enabled" class="w-full py-4 glass-card text-xs font-bold hover:bg-white/10 transition-all uppercase tracking-widest disabled:opacity-20">Test Connectivity</button>
+              <button class="w-full py-4 bg-blue-600 text-white text-xs font-bold rounded-2xl hover:bg-blue-500 shadow-xl transition-all uppercase tracking-widest" (click)="showSettings = false">Save Configuration</button>
+           </div>
         </div>
       }
     </aside>
-  `
+  `,
+  styles: [`
+    :host { display: block; height: 100%; }
+    .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.05); border-radius: 10px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.15); }
+  `]
 })
 export class AiAssistantComponent implements AfterViewChecked {
   aiService = inject(AiService);

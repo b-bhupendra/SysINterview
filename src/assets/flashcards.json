@@ -1,0 +1,44 @@
+[
+  {
+    "id": "fc1",
+    "term": "CAP Theorem",
+    "definition": "States that a distributed data store can only provide two of three guarantees: Consistency, Availability, and Partition Tolerance.",
+    "category": "Foundations",
+    "difficulty": "Easy"
+  },
+  {
+    "id": "fc2",
+    "term": "Consistent Hashing",
+    "definition": "A technique used to distribute requests across a cluster of servers in a way that minimizes reconfiguration when nodes are added or removed.",
+    "category": "Scalability",
+    "difficulty": "Medium"
+  },
+  {
+    "id": "fc3",
+    "term": "Write-Ahead Log (WAL)",
+    "definition": "A family of techniques for providing atomicity and durability in database systems. Changes are first recorded in a log on stable storage before being applied to the database.",
+    "category": "Databases",
+    "difficulty": "Hard"
+  },
+  {
+    "id": "fc4",
+    "term": "Gossip Protocol",
+    "definition": "A peer-to-peer communication protocol in which nodes periodically exchange information about themselves and other nodes they know about to reach eventual consistency.",
+    "category": "Networking",
+    "difficulty": "Medium"
+  },
+  {
+    "id": "fc5",
+    "term": "Bloom Filter",
+    "definition": "A space-efficient probabilistic data structure used to test whether an element is a member of a set. It can result in false positives but never false negatives.",
+    "category": "Algorithms",
+    "difficulty": "Hard"
+  },
+  {
+    "id": "fc6",
+    "term": "Read-Through Cache",
+    "definition": "A caching strategy where the application treats the cache as the main data store and reads data from it. If the data is missing, the cache loads it from the DB and returns it.",
+    "category": "Caching",
+    "difficulty": "Medium"
+  }
+]
