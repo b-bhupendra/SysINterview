@@ -1,4 +1,5 @@
 import { Component, ElementRef, ViewChild, AfterViewInit, signal } from '@angular/core';
+import { CommonModule } from '@angular/common';
 import { MatIconModule } from '@angular/material/icon';
 
 type ShapeMode = 'pen' | 'rect' | 'circle' | 'text' | 'line' | 'eraser';
@@ -17,12 +18,20 @@ interface Layer {
   visible: boolean;
   locked: boolean;
   shapes: Shape[];
+  groupId?: string;
+}
+
+interface LayerGroup {
+  id: string;
+  name: string;
+  expanded: boolean;
+  layerIds: string[];
 }
 
 @Component({
   selector: 'app-whiteboard',
   standalone: true,
-  imports: [MatIconModule],
+  imports: [CommonModule, MatIconModule],
   template: `
     <div class="relative w-full h-full flex flex-col bg-slate-950 border-l border-slate-800 overflow-hidden bg-[radial-gradient(#1e293b_1px,transparent_1px)] [background-size:24px_24px]">
       
@@ -41,53 +50,116 @@ interface Layer {
         />
       }
 
+      <!-- Undo/Redo Floating -->
+      <div class="absolute top-4 left-4 z-20 flex gap-1 bg-slate-900/90 border border-slate-800 p-1 rounded-lg">
+        <button (click)="undo()" [disabled]="historyIndex <= 0" 
+                class="p-2 text-slate-400 hover:text-white disabled:opacity-30 transition">
+          <mat-icon class="text-[18px] w-[18px] h-[18px]">undo</mat-icon>
+        </button>
+        <button (click)="redo()" [disabled]="historyIndex >= history.length - 1" 
+                class="p-2 text-slate-400 hover:text-white disabled:opacity-30 transition">
+          <mat-icon class="text-[18px] w-[18px] h-[18px]">redo</mat-icon>
+        </button>
+      </div>
+
       <!-- Layers Panel -->
-      <div class="absolute top-4 right-4 z-20 w-48 bg-slate-900/90 border border-slate-800 rounded-xl shadow-2xl backdrop-blur-md overflow-hidden flex flex-col transition-all h-fit max-h-[300px]">
+      <div class="absolute top-4 right-4 z-20 w-64 bg-slate-900/90 border border-slate-800 rounded-xl shadow-2xl backdrop-blur-md overflow-hidden flex flex-col transition-all h-fit max-h-[80vh]">
         <div class="p-3 border-b border-slate-800 flex items-center justify-between bg-slate-800/50">
-          <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Layers</span>
-          <button (click)="addLayer()" class="text-blue-400 hover:text-blue-300 transition outline-none" title="Add Layer">
-            <mat-icon class="text-[18px] w-[18px] h-[18px]">add_circle</mat-icon>
-          </button>
+          <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Layers</span>
+          <div class="flex gap-1">
+            <button (click)="addGroup()" class="text-amber-500/80 hover:text-amber-400 transition" title="New Group">
+              <mat-icon class="text-[18px] w-[18px] h-[18px]">create_new_folder</mat-icon>
+            </button>
+            <button (click)="addLayer()" class="text-blue-400 hover:text-blue-300 transition" title="New Layer">
+              <mat-icon class="text-[18px] w-[18px] h-[18px]">add_circle</mat-icon>
+            </button>
+          </div>
         </div>
-        <div class="overflow-y-auto py-1">
-          @for (layer of layers; track layer.id) {
-            <div 
-              class="flex items-center px-3 py-2 gap-2 group transition-colors cursor-pointer"
-              [class.bg-blue-500/10]="activeLayerId === layer.id"
-              (click)="activeLayerId = layer.id"
-            >
-              <button (click)="$event.stopPropagation(); layer.visible = !layer.visible; draw()" 
-                      class="text-slate-500 hover:text-slate-300 transition outline-none"
-                      [class.text-blue-400]="layer.visible">
-                <mat-icon class="text-[16px] w-[16px] h-[16px]">{{ layer.visible ? 'visibility' : 'visibility_off' }}</mat-icon>
-              </button>
-              <span class="flex-1 text-[11px] font-medium truncate" 
-                    [class.text-slate-200]="activeLayerId === layer.id"
-                    [class.text-slate-400]="activeLayerId !== layer.id">
-                {{ layer.name }}
-              </span>
-              <div class="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button (click)="$event.stopPropagation(); moveLayer(layer.id, -1)" 
-                        class="text-slate-500 hover:text-slate-300 transition outline-none disabled:opacity-30"
-                        [disabled]="isFirst(layer.id)">
-                  <mat-icon class="text-[14px] w-[14px] h-[14px]">expand_less</mat-icon>
+        
+        <div class="overflow-y-auto pt-2 pb-4">
+          <!-- Groups -->
+          @for (group of groups; track group.id) {
+            <div class="mb-1">
+              <div class="flex items-center px-3 py-1.5 gap-2 group/group bg-slate-800/10 hover:bg-slate-800/30 transition-colors">
+                <button (click)="group.expanded = !group.expanded" class="text-slate-500 hover:text-slate-300">
+                  <mat-icon class="text-[16px] w-[16px] h-[16px]">{{ group.expanded ? 'expand_more' : 'chevron_right' }}</mat-icon>
                 </button>
-                <button (click)="$event.stopPropagation(); moveLayer(layer.id, 1)" 
-                        class="text-slate-500 hover:text-slate-300 transition outline-none disabled:opacity-30"
-                        [disabled]="isLast(layer.id)">
-                  <mat-icon class="text-[14px] w-[14px] h-[14px]">expand_more</mat-icon>
-                </button>
-                @if (layers.length > 1) {
-                  <button (click)="$event.stopPropagation(); removeLayer(layer.id)" 
-                          class="text-rose-500/70 hover:text-rose-400 transition outline-none ml-1">
-                    <mat-icon class="text-[14px] w-[14px] h-[14px]">remove_circle</mat-icon>
+                <mat-icon class="text-[14px] w-[14px] h-[14px] text-amber-500/70">folder</mat-icon>
+                <div class="flex-1 min-w-0">
+                  <span class="text-[10px] font-bold text-slate-500 uppercase truncate block">{{ group.name }}</span>
+                </div>
+                <div class="flex items-center opacity-0 group-hover/group:opacity-100 transition-opacity">
+                  <button (click)="$event.stopPropagation(); removeGroup(group.id)" class="text-rose-500/50 hover:text-rose-500 ml-1">
+                    <mat-icon class="text-[14px] w-[14px] h-[14px]">delete</mat-icon>
                   </button>
-                }
+                </div>
               </div>
+              
+              @if (group.expanded) {
+                <div class="pl-4 border-l-2 border-slate-800/50 ml-5 mr-2 space-y-0.5 mt-1">
+                  @for (layerId of group.layerIds; track layerId) {
+                    @let nestedLayer = getLayerById(layerId);
+                    @if (nestedLayer) {
+                      <ng-container [ngTemplateOutlet]="layerRow" [ngTemplateOutletContext]="{ layer: nestedLayer }"></ng-container>
+                    }
+                  }
+                  @if (group.layerIds.length === 0) {
+                    <div class="text-[9px] text-slate-600 italic py-1">Empty group</div>
+                  }
+                </div>
+              }
             </div>
+          }
+
+          <!-- Ungrouped Layers Header -->
+          @if (hasUngroupedLayers()) {
+            <div class="px-3 py-1 text-[9px] font-bold text-slate-600 uppercase tracking-widest mt-2 mb-1">Ungrouped</div>
+          }
+
+          @for (layer of layers; track layer.id) {
+            @if (!layer.groupId) {
+              <ng-container [ngTemplateOutlet]="layerRow" [ngTemplateOutletContext]="{ layer: layer }"></ng-container>
+            }
           }
         </div>
       </div>
+
+      <ng-template #layerRow let-layer="layer">
+        <div 
+          class="flex items-center px-3 py-1.5 gap-2 group/layer transition-all border border-transparent mx-2 rounded-lg cursor-pointer hover:bg-slate-800/40"
+          [class.bg-blue-600/20]="activeLayerId === layer.id"
+          [class.border-blue-500/30]="activeLayerId === layer.id"
+          (click)="activeLayerId = layer.id"
+        >
+          <button (click)="$event.stopPropagation(); layer.visible = !layer.visible; saveHistory(); draw()" 
+                  class="text-slate-600 hover:text-blue-400 transition"
+                  [class.text-blue-500]="layer.visible">
+            <mat-icon class="text-[16px] w-[16px] h-[16px]">{{ layer.visible ? 'visibility' : 'visibility_off' }}</mat-icon>
+          </button>
+          <span class="flex-1 text-[11px] font-medium truncate" 
+                [class.text-slate-200]="activeLayerId === layer.id"
+                [class.text-slate-500]="activeLayerId !== layer.id">
+            {{ layer.name }}
+          </span>
+          <div class="flex items-center gap-1 opacity-0 group-hover/layer:opacity-100 transition-opacity">
+            @if (!layer.groupId) {
+              <button (click)="$event.stopPropagation(); moveLayer(layer.id, -1)" 
+                      class="text-slate-500 hover:text-white" [disabled]="isFirst(layer.id)">
+                <mat-icon class="text-[14px] w-[14px] h-[14px]">expand_less</mat-icon>
+              </button>
+            }
+            <button (click)="$event.stopPropagation(); openMoveToGroup(layer.id)" class="text-slate-500 hover:text-amber-500" title="Move to group">
+               <mat-icon class="text-[14px] w-[14px] h-[14px]">drive_file_move</mat-icon>
+            </button>
+            @if (layers.length > 1) {
+              <button (click)="$event.stopPropagation(); removeLayer(layer.id)" 
+                      class="text-rose-500/30 hover:text-rose-500">
+                <mat-icon class="text-[14px] w-[14px] h-[14px]">remove_circle</mat-icon>
+              </button>
+            }
+          </div>
+        </div>
+      </ng-template>
       
       <!-- Toolbar -->
       <div class="absolute bottom-8 left-1/2 -translate-x-1/2 z-10 flex items-center space-x-1 bg-slate-900 border border-slate-800 p-1.5 rounded-xl shadow-2xl backdrop-blur-md">
@@ -201,9 +273,14 @@ export class WhiteboardComponent implements AfterViewInit {
   textInput = { visible: false, x: 0, y: 0, text: '' };
 
   layers: Layer[] = [
-    { id: 'l1', name: 'Base Layer', visible: true, locked: false, shapes: [] }
+    { id: 'l1', name: 'Base Architecture', visible: true, locked: false, shapes: [] }
   ];
+  groups: LayerGroup[] = [];
   activeLayerId = 'l1';
+
+  // History system
+  history: { layers: Layer[], groups: LayerGroup[] }[] = [];
+  historyIndex = -1;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   currentShape: any = null;
@@ -217,12 +294,16 @@ export class WhiteboardComponent implements AfterViewInit {
     { name: 'Eraser', val: 'eraser', icon: 'cleaning_services' },
   ];
 
+  constructor() {
+    this.saveHistory();
+  }
+
   get activeLayer() {
     return this.layers.find(l => l.id === this.activeLayerId)!;
   }
 
   addLayer() {
-    const id = 'l' + (this.layers.length + 1);
+    const id = 'l' + Date.now();
     this.layers.unshift({
       id,
       name: `Layer ${this.layers.length + 1}`,
@@ -231,14 +312,119 @@ export class WhiteboardComponent implements AfterViewInit {
       shapes: []
     });
     this.activeLayerId = id;
+    this.saveHistory();
+  }
+
+  addGroup() {
+    const id = 'g' + Date.now();
+    this.groups.unshift({
+      id,
+      name: `Group ${this.groups.length + 1}`,
+      expanded: true,
+      layerIds: []
+    });
+    this.saveHistory();
+  }
+
+  removeGroup(id: string) {
+    const group = this.groups.find(g => g.id === id);
+    if (!group) return;
+    
+    // Dissolve group: layers stay but lose groupId
+    this.layers.map(l => {
+      if (l.groupId === id) l.groupId = undefined;
+    });
+    this.groups = this.groups.filter(g => g.id !== id);
+    this.saveHistory();
+  }
+
+  getLayerById(id: string) {
+    return this.layers.find(l => l.id === id);
+  }
+
+  hasUngroupedLayers() {
+    return this.layers.some(l => !l.groupId);
+  }
+
+  openMoveToGroup(layerId: string) {
+    if (this.groups.length === 0) {
+      alert('Create a group first!');
+      return;
+    }
+    const gId = prompt('Move to group ID (Enter group index 1, 2... or group name):');
+    if (!gId) return;
+
+    const group = this.groups.find(g => g.name === gId || g.id === gId || this.groups.indexOf(g) + 1 === parseInt(gId));
+    if (group) {
+      const layer = this.layers.find(l => l.id === layerId);
+      if (layer) {
+        // Remove from old group if any
+        if (layer.groupId) {
+          const oldG = this.groups.find(g => g.id === layer.groupId);
+          if (oldG) oldG.layerIds = oldG.layerIds.filter(id => id !== layerId);
+        }
+        layer.groupId = group.id;
+        group.layerIds.push(layerId);
+        this.saveHistory();
+      }
+    }
+  }
+
+  undo() {
+    if (this.historyIndex > 0) {
+      this.historyIndex--;
+      this.applyHistory();
+    }
+  }
+
+  redo() {
+    if (this.historyIndex < this.history.length - 1) {
+      this.historyIndex++;
+      this.applyHistory();
+    }
+  }
+
+  saveHistory() {
+    // Clone state
+    const state = {
+      layers: JSON.parse(JSON.stringify(this.layers)),
+      groups: JSON.parse(JSON.stringify(this.groups))
+    };
+    
+    // Truncate future if any
+    if (this.historyIndex < this.history.length - 1) {
+      this.history = this.history.slice(0, this.historyIndex + 1);
+    }
+    
+    this.history.push(state);
+    if (this.history.length > 50) this.history.shift(); // Limit history
+    this.historyIndex = this.history.length - 1;
+  }
+
+  private applyHistory() {
+    const state = this.history[this.historyIndex];
+    this.layers = JSON.parse(JSON.stringify(state.layers));
+    this.groups = JSON.parse(JSON.stringify(state.groups));
+    
+    // Ensure activeLayerId is still valid
+    if (!this.layers.find(l => l.id === this.activeLayerId)) {
+      this.activeLayerId = this.layers[0].id;
+    }
+    this.draw();
   }
 
   removeLayer(id: string) {
     if (this.layers.length <= 1) return;
+    const layer = this.layers.find(l => l.id === id);
+    if (layer?.groupId) {
+      const g = this.groups.find(group => group.id === layer.groupId);
+      if (g) g.layerIds = g.layerIds.filter(lid => lid !== id);
+    }
     this.layers = this.layers.filter(l => l.id !== id);
     if (this.activeLayerId === id) {
       this.activeLayerId = this.layers[0].id;
     }
+    this.saveHistory();
     this.draw();
   }
 
@@ -266,6 +452,18 @@ export class WhiteboardComponent implements AfterViewInit {
     this.initCanvas();
     this.resizeCanvas();
     window.addEventListener('resize', () => this.resizeCanvas());
+    
+    // Key bindings for undo/redo
+    window.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+        e.preventDefault();
+        this.undo();
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
+        e.preventDefault();
+        this.redo();
+      }
+    });
   }
 
   initCanvas() {
@@ -338,11 +536,6 @@ export class WhiteboardComponent implements AfterViewInit {
 
   setMode(m: ShapeMode) {
     this.mode.set(m);
-  }
-
-  clear() {
-    this.activeLayer.shapes = [];
-    this.draw();
   }
 
   commitText(val: string) {
@@ -427,8 +620,15 @@ export class WhiteboardComponent implements AfterViewInit {
     if (this.isDrawing && this.currentShape) {
       this.activeLayer.shapes.push(this.currentShape);
       this.currentShape = null;
+      this.saveHistory();
     }
     this.isDrawing = false;
+    this.draw();
+  }
+
+  clear() {
+    this.activeLayer.shapes = [];
+    this.saveHistory();
     this.draw();
   }
 }
