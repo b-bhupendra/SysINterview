@@ -228,72 +228,170 @@
       "diagramHints": "1. DRAW: A recursive grid (QuadTree structure). 2. LINK: LBS Request -> Geohash Calculator -> QuadTree Searcher. 3. BOX: 'POI DB'. 4. PATH: Client GPS -> Update Service -> Redis GeoSet."
     },
     {
-      "id": "uber",
-      "title": "Uber / Ride-Sharing",
-      "description": "A dynamic marketplace connecting drivers and riders in real-time.",
+      "id": "google_drive",
+      "title": "Google Drive / Dropbox",
+      "description": "File storage and synchronization service with versioning and high availability.",
       "difficulty": "Hard",
       "requirements": [
-        "Real-time dispatching (<1s)",
-        "Supply/Demand forecasting",
-        "Google S2 Library (Hilbert Curve)",
-        "Location heartbeats every 4s",
-        "Dynamic Pricing (Surge)"
+        "Delta Sync (Only upload changes)",
+        "Conflict Resolution",
+        "Chunk-based storage",
+        "Deduplication (across users)",
+        "Metadata Consistency (ACID)"
       ],
       "key_topics": [
-        "Quadrant indexing vs S2 cells",
-        "Ring buffer for location history",
-        "Consistent Hashing for city partitions",
-        "Marketplace matching algorithm"
+        "Chunking (Fixed vs Content-defined)",
+        "Merkle Trees (for diffing)",
+        "Notification Service (WebSocket)",
+        "Block Storage vs Metadata"
       ],
-      "theory": "Uber's core challenge is the Dispatcher. The world is divided into S2 cells (Hilbert Curve mapping). Drivers send location updates every few seconds to 'Driver Location' service. When a rider requests a trip, the 'Matcher' identifies available drivers in the same S2 cell (and adjacent cells). It uses a dynamic marketplace model where Surge Pricing is calculated based on real-time supply/demand (Kafka streams analyzing trip requests vs driver availability in a geo-fence).",
+      "theory": "Google Drive uses a chunk-based architecture. Files are split into 4MB blocks. If a file is updated, only modified blocks are re-uploaded (Delta Sync). To detect changes quickly, a 'Indexer' on the client calculates hashes of blocks. Conflict resolution usually follows 'last writer wins' or creates a 'Conflict Copy'. Metadata is stored in a relational DB for version control, while raw blocks go to S3/Object Store. Deduplication happens at the block level: if 100 users have the same 'Common Library' file, it's stored once.",
       "components": [
-        "Driver Location Service (Redis)",
-        "Dispatch Engine (Marketplace)",
-        "Trip Manager",
-        "Surge Pricing Engine (Spark Streaming)",
-        "Payment/Rating Service"
+        "Block Server (Chunking/Checksums)",
+        "Metadata Service (SQL with Sharding)",
+        "Synchronization Service",
+        "Notification Service",
+        "Cloud Storage (Object store)"
       ],
       "bottlenecks": [
-        "Write Load: Millions of drivers sending locations every 4s. Solved by sharding Redis by CityID.",
-        "Matching Accuracy: GPS drift/congestion. Use Google Maps ETA service inside the dispatcher.",
-        "Availability: Dispatcher must be stateless and horizontally scalable."
+        "Upload Latency: Huge files saturate bandwidth. Use parallel uploads for different chunks.",
+        "Metadata Load: Billions of file versions. Shard metadata by 'FolderID' or 'NamespaceID'.",
+        "Connectivity: Mobile users losing signal mid-sync. Use resumable uploads."
       ],
-      "diagramHints": "1. FLOW: Driver --[GPS]--> WS Gateway -> Driver Location DB. 2. LINK: Rider -> Dispatcher -> Matcher API. 3. BOX: S2/Geohash logic layer. 4. SHOW: Surge Service reading from Kafka streams.",
-      "deep_dive": "The Dispatcher uses a Gossip-like protocol or a highly optimized Redis Cluster sharded by Geo-Hash. To handle 'Surge', we use a stream-processing engine (like Flink or Spark) that calculates the 'Request-to-Driver' ratio in moving 5-minute windows. If the ratio > 1.2, it triggers surge multipliers. The 'Matcher' doesn't just pick the closest driver; it filters by driver ratings, vehicle type, and 'direction of travel' to maximize throughput."
+      "diagramHints": "1. FLOW: Client -> Block Server -> S3 (Data). 2. LINK: Block Server -> Metadata Service (verify chunks). 3. BOX: Notification service pushing sync signals. 4. SHOW: DB Sharding by UserRoot.",
+      "deep_dive": "Merkle Trees are the secret sauce. By comparing hashes of tree nodes instead of every byte, the server identifies exactly which 4MB chunk changed in a 10GB file in O(logN). For deduplication, we use 'CAS' (Content Addressable Storage) where the Block ID is the Hash of its content. This naturally prevents duplicate storage across the entire system."
     },
     {
-      "id": "ticketmaster",
-      "title": "Ticketmaster / Booking System",
-      "description": "High-concurrency booking with strict inventory consistency.",
-      "difficulty": "Hard",
+      "id": "rate_limiter",
+      "title": "API Rate Limiter",
+      "description": "Protecting services from thundering herds, DDoS, and abusive users.",
+      "difficulty": "Medium",
       "requirements": [
-        "Transactional Integrity (ACID)",
-        "Virtual Waiting Room (Queueing)",
-        "Distributed Lock (Redis Redlock)",
-        "Event Sourcing for Audit",
-        "Search/Discovery (Elasticsearch)"
+        "Low Latency (<1ms overhead)",
+        "Distributed consistency",
+        "Flexible algorithms",
+        "High Availability"
       ],
       "key_topics": [
-        "Inventory management (Atomicity)",
-        "Optimistic vs Pessimistic locking",
-        "Fault tolerance during payment",
-        "Global vs Regional scaling"
+        "Token Bucket vs Leaky Bucket",
+        "Fixed Window vs Sliding Window",
+        "Redis Lua scripts for atomicity",
+        "Race condition handling"
       ],
-      "theory": "Designing for 'The Eras Tour' requires handling millions of requests for 50k seats. Key strategy: A 'Waiting Room' (Virtual Queue) that throttles incoming traffic to prevent DB crashing. For seat allocation, we use 'Temporary Holds' (Redis with TTL). When a user selects a seat, a distributed lock is placed. If payment succeeds, the seat is marked 'Sold' permanently. If it fails or TTL expires, the seat returns to the pool. ACID compliance in the DB is non-negotiable for the final booking state.",
+      "theory": "Rate limiters act as a shield. The 'Token Bucket' algorithm is standard: tokens are added to a bucket at a fixed rate, and each request consumes a token. If the bucket is empty, the request is dropped (429 Too Many Requests). In a distributed environment, use 'Redis' to store counters. To avoid race conditions (two web servers updating the same count), use 'Redis Lua scripts' which execute atomically on the Redis node.",
       "components": [
-        "Waiting Room Proxy",
-        "Inventory Service (Redis Holds + SQL)",
-        "Booking Service",
-        "Payment Gateway Integration",
-        "Notification Service (Email/SMS)"
+        "Middleware (Sidecar/Proxy)",
+        "Centralized Cache (Redis)",
+        "Configuration Service (for limits)",
+        "Analytics/Alerting (monitoring triggers)"
       ],
       "bottlenecks": [
-        "Database Contention: Row-level locking on 'Seats' table. Solved by partitioning inventory by EventID.",
-        "Double Booking: Race conditions. Solved by idempotent booking IDs.",
-        "System wide failure: If any core component dies, users lose tickets. Use transactional sagas."
+        "Centralized Bottleneck: Calling Redis for every request adds latency. Use 'Local Caching' with periodic sync (Sync-to-Redis) for non-critical limits.",
+        "Clock Skew: Sliding window logs relying on system time. Use a central NTP or logical clocks.",
+        "Storage: Billions of user counters. Use Redis with eviction or TTL."
       ],
-      "diagramHints": "1. DRAW: Users -> Waiting Room -> Load Balancer. 2. BOX: Redis for 'Temporary Seat Reservation'. 3. LINK: Payment Service to 3rd party API. 4. SHOW: Relational DB with ACID transactions for final 'Sold' status.",
-      "deep_dive": "Virtual Queueing works by issuing a 'Signed Token' with a sequence number. The app only allows tokens 1-5000 to reach the Booking API. Distributed locking is tricky: we use Redis with a 10-minute TTL for 'Hold'. If the user's internet drops, the lock expires automatically. For ultimate consistency, use a 'Two-Phase Commit' (2PC) or a Saga pattern between the Booking and Payment services to ensure we don't bill for an expired seat."
+      "diagramHints": "1. DRAW: Client -> Rate Limiter Middleware -> Web Server. 2. LINK: Middleware -> Redis (Check/Increment). 3. PATH: Config Update -> Redis (Reload limits). 4. SHOW: Token Bucket replenishment logic.",
+      "deep_dive": "The 'Sliding Window Log' prevents a burst of traffic at the edge of two windows (e.g., 59th second and 1st second). It stores timestamps of every request. However, it uses too much memory. The better approach is 'Sliding Window Counter', which approximates the count by combining the current window and the weighted average of the previous window."
+    },
+    {
+      "id": "netflix",
+      "title": "Video Streaming (Netflix)",
+      "description": "Global content delivery with adaptive bitrate and high resilience.",
+      "difficulty": "Hard",
+      "requirements": [
+        "Adaptive Bitrate Streaming (HLS/DASH)",
+        "Content Ingestion & Encoding",
+        "Global Content Delivery (Open Connect)",
+        "Regional Failover",
+        "Recommendation Engine Integration"
+      ],
+      "key_topics": [
+        "Transcoding (Different resolutions/codecs)",
+        "CDN (Content Delivery Network)",
+        "Edge Computing",
+        "Microservices (Chaos Engineering)"
+      ],
+      "theory": "Netflix architecture is split into the Control Plane (AWS for logic/API) and the Delivery Plane (Open Connect - their own CDN). Videos are encoded into hundreds of formats for every device. Adaptive Bitrate (ABR) means the player monitors network speed and switches between 360p, 720p, or 4K streams in real-time. To ensure 0 buffer, they push popular movies to CDN nodes inside ISP data centers, so data travels 'the last mile' only.",
+      "components": [
+        "Ingestion Service",
+        "Encoding Pipeline (Queue based)",
+        "CDN (Open Connect)",
+        "Playback Service",
+        "Chaos Gorilla (Testing failovers)"
+      ],
+      "bottlenecks": [
+        "Encoding Time: Taking 24 hours to encode 4K. Solved by parallelizing encoding of file chunks.",
+        "Network Congestion: ISP bottlenecks. Solved by placing CDN boxes directly in ISPs (Local caching).",
+        "Availability: AWS region outage. Solved by multi-region active-active deployment."
+      ],
+      "diagramHints": "1. SPLIT: Management (AWS) vs Delivery (CDN). 2. FLOW: Raw Video -> Encoding -> CDN Storage. 3. LINK: User Player -> Playback API -> Gets Optimal CDN URL. 4. SHOW: Multiple resolutions of the same video at Edge.",
+      "deep_dive": "Chaos Engineering (Simian Army) is central. They intentionally kill servers and even whole regions to ensure the Control Plane is 'Anti-fragile'. For the video delivery, they use 'Predictive Caching': analyzing viewing trends to push a movie to a specific city's CDN *before* users even ask for it."
+    },
+    {
+      "id": "distributed_cache",
+      "title": "Distributed Cache (Redis Cluster)",
+      "description": "High-speed key-value storage scaled across many machines.",
+      "difficulty": "Hard",
+      "requirements": [
+        "Data Sharding (Consistent Hashing)",
+        "Replication (Master-Slave)",
+        "Persistence (RDB vs AOF)",
+        "Eviction Policies (LRU/LFU)",
+        "Sentinel for Auto-failover"
+      ],
+      "key_topics": [
+        "Gossip Protocol",
+        "Hash Slots (16384 total)",
+        "Write-through vs Write-back",
+        "Cache Avalanche/Stampede"
+      ],
+      "theory": "A distributed cache uses 'Consistent Hashing' or 'Hash Slots' to distribute keys. In Redis Cluster, there are 16,384 hash slots. Each node is responsible for a range. Nodes communicate via 'Gossip Protocol' to track health. To avoid data loss, each master has one or more slaves. Eviction is crucial: LRU (Least Recently Used) removes old data when memory is full. Cache Stampede is prevented by 'Locking' or 'Soft-TTLs' which trigger background refresh before expiration.",
+      "components": [
+        "Cache Nodes (Masters + Slaves)",
+        "Cluster Manager (Zookeeper or built-in Gossip)",
+        "Config Store",
+        "Health Checker (Sentinel)"
+      ],
+      "bottlenecks": [
+        "Network Bandwidth: Gigantic values saturating pipes. Solved by data compression.",
+        "Hot Keys: Millions of requests for one key (e.g. celebrity profile). Solved by 'Local Caching' at the app level or 'Key Replication'.",
+        "Replication Lag: Slave being out of sync. Solved by synchronous replication (trade-off: speed)."
+      ],
+      "diagramHints": "1. CIRCLE: Nodes arranged in a Ring. 2. PATH: Key -> Hash(Key) -> SlotID -> Node. 3. LINK: Master -> Slave (Replication). 4. BOX: App Server with small 'Local LRU Cache'.",
+      "deep_dive": "Consistency vs Availability in Cache: Redis is usually AP (Available and Partition tolerant). It prioritizes speed. If a network partition occurs, writes to a minor side might be lost after recovery. For CP (Consistency), use 'Etcd' or 'Consul' which use the Raft consensus algorithm, but they are significantly slower."
+    },
+    {
+      "id": "log_aggregation",
+      "title": "Log Aggregation (ELK Stack)",
+      "description": "Collecting, indexing, and searching billions of log lines in real-time.",
+      "difficulty": "Medium",
+      "requirements": [
+        "Scalable ingestion (Kafka)",
+        "Inverted Index search",
+        "Time-series sharding",
+        "Schema-less storage"
+      ],
+      "key_topics": [
+        "ELK (Elastic, Logstash, Kibana)",
+        "Beats (Lightweight shippers)",
+        "Lucene segments",
+        "Rate limiting log producers"
+      ],
+      "theory": "Logs are produced by thousands of nodes. 'Beats' (shippers) send logs to 'Kafka' (buffer) or 'Logstash' (processor). Logstash parses/transforms logs before sending them to 'Elasticsearch'. Elasticsearch stores data in 'Indexes' which are sharded by Date. Within each shard, Lucene creates 'Inverted Indexes' for fast searching. Kibana provides a UI to query this vast data.",
+      "components": [
+        "Log Shippers (Filebeat)",
+        "Message Buffer (Kafka)",
+        "Processing Service (Logstash/Vector)",
+        "Search Engine (Elasticsearch)",
+        "Visualization (Kibana)"
+      ],
+      "bottlenecks": [
+        "Write Throughput: Indexing is expensive. Solved by 'Bulk API' writes and turning off 'Refreshes' during high load.",
+        "Storage Cost: Logs grow indefinitely. Solved by 'Index Lifecycle Management' (Hot -> Warm -> Cold -> Delete).",
+        "Memory Usage: Elasticsearch is Java-based and memory-hungry. Use specialized heap tuning."
+      ],
+      "diagramHints": "1. FLOW: Server -> Filebeat -> Kafka -> Logstash -> ES. 2. BOX: 'Kibana' pointing at ES. 3. LINK: ES Shards mapped to Date ranges. 4. SHOW: Lucene segments inside a Shard.",
+      "deep_dive": "Back-pressure is key. If Elasticsearch slows down, Logstash might crash or slow down the whole app. Kafka acts as the 'Shock Absorber', storing logs on disk until the indexing pipeline can catch up. To save space, we don't index 'Full Text' for all fields; we selectively choose fields for 'Keywords' vs 'Text'."
     },
     {
       "id": "notification_service",

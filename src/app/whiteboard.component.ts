@@ -1,14 +1,22 @@
-import { Component, ElementRef, ViewChild, AfterViewInit, signal } from '@angular/core';
+import { Component, ElementRef, ViewChild, AfterViewInit, signal, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatIconModule } from '@angular/material/icon';
+import { DragDropModule, CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-drop';
 
-type ShapeMode = 'pen' | 'rect' | 'circle' | 'text' | 'line' | 'eraser';
+type ShapeMode = 'select' | 'pen' | 'rect' | 'circle' | 'text' | 'line' | 'eraser';
 
-interface PathShape { type: 'path'; path: {x: number, y: number}[]; color: string; width: number; }
-interface RectShape { type: 'rect'; x: number; y: number; w: number; h: number; color: string; width: number; }
-interface CircleShape { type: 'circle'; x: number; y: number; r: number; color: string; width: number; }
-interface TextShape { type: 'text'; x: number; y: number; text: string; color: string; font: string; width?: number; }
-interface LineShape { type: 'line'; x1: number; y1: number; x2: number; y2: number; color: string; width: number; }
+interface BaseShape {
+  id: string;
+  color: string;
+  width: number;
+  isSelected?: boolean;
+}
+
+interface PathShape extends BaseShape { type: 'path'; path: {x: number, y: number}[]; }
+interface RectShape extends BaseShape { type: 'rect'; x: number; y: number; w: number; h: number; }
+interface CircleShape extends BaseShape { type: 'circle'; x: number; y: number; r: number; }
+interface TextShape extends BaseShape { type: 'text'; x: number; y: number; text: string; font: string; }
+interface LineShape extends BaseShape { type: 'line'; x1: number; y1: number; x2: number; y2: number; }
 
 type Shape = PathShape | RectShape | CircleShape | TextShape | LineShape;
 
@@ -31,7 +39,7 @@ interface LayerGroup {
 @Component({
   selector: 'app-whiteboard',
   standalone: true,
-  imports: [CommonModule, MatIconModule],
+  imports: [CommonModule, MatIconModule, DragDropModule],
   template: `
     <div class="relative w-full h-full flex flex-col bg-slate-950 border-l border-slate-800 overflow-hidden bg-[radial-gradient(#1e293b_1px,transparent_1px)] [background-size:24px_24px]">
       
@@ -50,16 +58,27 @@ interface LayerGroup {
         />
       }
 
-      <!-- Undo/Redo Floating -->
-      <div class="absolute top-4 left-4 z-20 flex gap-1 bg-slate-900/90 border border-slate-800 p-1 rounded-lg">
-        <button (click)="undo()" [disabled]="historyIndex <= 0" 
-                class="p-2 text-slate-400 hover:text-white disabled:opacity-30 transition">
-          <mat-icon class="text-[18px] w-[18px] h-[18px]">undo</mat-icon>
-        </button>
-        <button (click)="redo()" [disabled]="historyIndex >= history.length - 1" 
-                class="p-2 text-slate-400 hover:text-white disabled:opacity-30 transition">
-          <mat-icon class="text-[18px] w-[18px] h-[18px]">redo</mat-icon>
-        </button>
+      <!-- Undo/Redo/Delete Floating -->
+      <div class="absolute top-4 left-4 z-20 flex gap-2">
+        <div class="flex gap-1 bg-slate-900/90 border border-slate-800 p-1 rounded-lg backdrop-blur-md">
+          <button (click)="undo()" [disabled]="historyIndex <= 0" 
+                  class="p-2 text-slate-400 hover:text-white disabled:opacity-30 transition">
+            <mat-icon class="text-[18px] w-[18px] h-[18px]">undo</mat-icon>
+          </button>
+          <button (click)="redo()" [disabled]="historyIndex >= history.length - 1" 
+                  class="p-2 text-slate-400 hover:text-white disabled:opacity-30 transition">
+            <mat-icon class="text-[18px] w-[18px] h-[18px]">redo</mat-icon>
+          </button>
+        </div>
+        
+        @if (selectedShape) {
+          <div class="flex gap-1 bg-rose-900/40 border border-rose-500/30 p-1 rounded-lg backdrop-blur-md">
+            <button (click)="deleteSelected()" 
+                    class="p-2 text-rose-400 hover:text-rose-200 transition">
+              <mat-icon class="text-[18px] w-[18px] h-[18px]">delete</mat-icon>
+            </button>
+          </div>
+        }
       </div>
 
       <!-- Layers Panel -->
@@ -76,11 +95,11 @@ interface LayerGroup {
           </div>
         </div>
         
-        <div class="overflow-y-auto pt-2 pb-4">
+        <div class="overflow-y-auto pt-2 pb-4" cdkDropList (cdkDropListDropped)="onLayerDrop($event)">
           <!-- Groups -->
           @for (group of groups; track group.id) {
-            <div class="mb-1">
-              <div class="flex items-center px-3 py-1.5 gap-2 group/group bg-slate-800/10 hover:bg-slate-800/30 transition-colors">
+            <div class="mb-1" cdkDrag [cdkDragDisabled]="false">
+              <div class="flex items-center px-3 py-1.5 gap-2 group/group bg-slate-800/10 hover:bg-slate-800/30 transition-colors cursor-move">
                 <button (click)="group.expanded = !group.expanded" class="text-slate-500 hover:text-slate-300">
                   <mat-icon class="text-[16px] w-[16px] h-[16px]">{{ group.expanded ? 'expand_more' : 'chevron_right' }}</mat-icon>
                 </button>
@@ -96,11 +115,13 @@ interface LayerGroup {
               </div>
               
               @if (group.expanded) {
-                <div class="pl-4 border-l-2 border-slate-800/50 ml-5 mr-2 space-y-0.5 mt-1">
+                <div class="pl-4 border-l-2 border-slate-800/50 ml-5 mr-2 space-y-0.5 mt-1" cdkDropList [cdkDropListData]="group.layerIds" (cdkDropListDropped)="onNestedLayerDrop($event, group)">
                   @for (layerId of group.layerIds; track layerId) {
                     @let nestedLayer = getLayerById(layerId);
                     @if (nestedLayer) {
-                      <ng-container [ngTemplateOutlet]="layerRow" [ngTemplateOutletContext]="{ layer: nestedLayer }"></ng-container>
+                      <div cdkDrag>
+                        <ng-container [ngTemplateOutlet]="layerRow" [ngTemplateOutletContext]="{ layer: nestedLayer }"></ng-container>
+                      </div>
                     }
                   }
                   @if (group.layerIds.length === 0) {
@@ -118,7 +139,9 @@ interface LayerGroup {
 
           @for (layer of layers; track layer.id) {
             @if (!layer.groupId) {
-              <ng-container [ngTemplateOutlet]="layerRow" [ngTemplateOutletContext]="{ layer: layer }"></ng-container>
+              <div cdkDrag>
+                <ng-container [ngTemplateOutlet]="layerRow" [ngTemplateOutletContext]="{ layer: layer }"></ng-container>
+              </div>
             }
           }
         </div>
@@ -142,12 +165,6 @@ interface LayerGroup {
             {{ layer.name }}
           </span>
           <div class="flex items-center gap-1 opacity-0 group-hover/layer:opacity-100 transition-opacity">
-            @if (!layer.groupId) {
-              <button (click)="$event.stopPropagation(); moveLayer(layer.id, -1)" 
-                      class="text-slate-500 hover:text-white" [disabled]="isFirst(layer.id)">
-                <mat-icon class="text-[14px] w-[14px] h-[14px]">expand_less</mat-icon>
-              </button>
-            }
             <button (click)="$event.stopPropagation(); openMoveToGroup(layer.id)" class="text-slate-500 hover:text-amber-500" title="Move to group">
                <mat-icon class="text-[14px] w-[14px] h-[14px]">drive_file_move</mat-icon>
             </button>
@@ -226,7 +243,9 @@ interface LayerGroup {
 
       <!-- Canvas -->
       <canvas #canvas 
-        class="absolute inset-0 w-full h-full cursor-crosshair touch-none"
+        class="absolute inset-0 w-full h-full touch-none"
+        [class.cursor-crosshair]="mode() !== 'select'"
+        [class.cursor-default]="mode() === 'select'"
         style="background: transparent;"
         (mousedown)="onPointerDown($event)"
         (mousemove)="onPointerMove($event)"
@@ -245,7 +264,7 @@ export class WhiteboardComponent implements AfterViewInit {
   
   mode = signal<ShapeMode>('pen');
   isDrawing = false;
-  currentColor = '#3b82f6'; // blue-500
+  currentColor = '#3b82f6';
   currentWidth = 3;
   
   colors = [
@@ -277,6 +296,8 @@ export class WhiteboardComponent implements AfterViewInit {
   ];
   groups: LayerGroup[] = [];
   activeLayerId = 'l1';
+  selectedShape: { shape: Shape, layerId: string } | null = null;
+  dragStartPos = { x: 0, y: 0 };
 
   // History system
   history: { layers: Layer[], groups: LayerGroup[] }[] = [];
@@ -286,6 +307,7 @@ export class WhiteboardComponent implements AfterViewInit {
   currentShape: any = null;
 
   tools: {name: string, val: ShapeMode, icon: string}[] = [
+    { name: 'Select', val: 'select', icon: 'near_me' },
     { name: 'Pen', val: 'pen', icon: 'edit' },
     { name: 'Rectangle', val: 'rect', icon: 'crop_square' },
     { name: 'Circle', val: 'circle', icon: 'radio_button_unchecked' },
@@ -315,6 +337,10 @@ export class WhiteboardComponent implements AfterViewInit {
     this.saveHistory();
   }
 
+  hasUngroupedLayers() {
+    return this.layers.some(l => !l.groupId);
+  }
+
   addGroup() {
     const id = 'g' + Date.now();
     this.groups.unshift({
@@ -327,11 +353,7 @@ export class WhiteboardComponent implements AfterViewInit {
   }
 
   removeGroup(id: string) {
-    const group = this.groups.find(g => g.id === id);
-    if (!group) return;
-    
-    // Dissolve group: layers stay but lose groupId
-    this.layers.map(l => {
+    this.layers.forEach(l => {
       if (l.groupId === id) l.groupId = undefined;
     });
     this.groups = this.groups.filter(g => g.id !== id);
@@ -342,29 +364,33 @@ export class WhiteboardComponent implements AfterViewInit {
     return this.layers.find(l => l.id === id);
   }
 
-  hasUngroupedLayers() {
-    return this.layers.some(l => !l.groupId);
+  onLayerDrop(event: CdkDragDrop<string[]>) {
+    moveItemInArray(this.layers, event.previousIndex, event.currentIndex);
+    this.saveHistory();
+    this.draw();
+  }
+
+  onNestedLayerDrop(event: CdkDragDrop<string[]>, group: LayerGroup) {
+    moveItemInArray(group.layerIds, event.previousIndex, event.currentIndex);
+    this.saveHistory();
+    this.draw();
   }
 
   openMoveToGroup(layerId: string) {
-    if (this.groups.length === 0) {
-      alert('Create a group first!');
-      return;
-    }
-    const gId = prompt('Move to group ID (Enter group index 1, 2... or group name):');
-    if (!gId) return;
-
-    const group = this.groups.find(g => g.name === gId || g.id === gId || this.groups.indexOf(g) + 1 === parseInt(gId));
-    if (group) {
+    const names = this.groups.map((g, i) => `${i+1}: ${g.name}`).join('\n');
+    const input = prompt(`Move to group:\n${names}\n(Enter number)`);
+    if (!input) return;
+    const idx = parseInt(input) - 1;
+    if (this.groups[idx]) {
+      const targetGroup = this.groups[idx];
       const layer = this.layers.find(l => l.id === layerId);
       if (layer) {
-        // Remove from old group if any
         if (layer.groupId) {
           const oldG = this.groups.find(g => g.id === layer.groupId);
           if (oldG) oldG.layerIds = oldG.layerIds.filter(id => id !== layerId);
         }
-        layer.groupId = group.id;
-        group.layerIds.push(layerId);
+        layer.groupId = targetGroup.id;
+        targetGroup.layerIds.push(layerId);
         this.saveHistory();
       }
     }
@@ -405,11 +431,10 @@ export class WhiteboardComponent implements AfterViewInit {
     const state = this.history[this.historyIndex];
     this.layers = JSON.parse(JSON.stringify(state.layers));
     this.groups = JSON.parse(JSON.stringify(state.groups));
-    
-    // Ensure activeLayerId is still valid
     if (!this.layers.find(l => l.id === this.activeLayerId)) {
-      this.activeLayerId = this.layers[0].id;
+      this.activeLayerId = this.layers[0]?.id || '';
     }
+    this.selectedShape = null;
     this.draw();
   }
 
@@ -421,11 +446,63 @@ export class WhiteboardComponent implements AfterViewInit {
       if (g) g.layerIds = g.layerIds.filter(lid => lid !== id);
     }
     this.layers = this.layers.filter(l => l.id !== id);
-    if (this.activeLayerId === id) {
-      this.activeLayerId = this.layers[0].id;
-    }
+    if (this.activeLayerId === id) this.activeLayerId = this.layers[0].id;
     this.saveHistory();
     this.draw();
+  }
+
+  @HostListener('window:keydown', ['$event'])
+  handleKeyboard(e: KeyboardEvent) {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); this.undo(); }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'y') { e.preventDefault(); this.redo(); }
+    if (e.key === 'Delete' || e.key === 'Backspace') { 
+      if (this.selectedShape && !this.textInput.visible) {
+        this.deleteSelected();
+      }
+    }
+    if (e.key === 'Escape') { this.selectedShape = null; this.draw(); }
+    
+    // Nudge selected shape
+    if (this.selectedShape && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+      e.preventDefault();
+      const step = e.shiftKey ? 10 : 2;
+      this.nudgeShape(e.key, step);
+    }
+  }
+
+  nudgeShape(key: string, step: number) {
+    if (!this.selectedShape) return;
+    const s = this.selectedShape.shape;
+    if (s.type === 'rect' || s.type === 'circle' || s.type === 'text') {
+      if (key === 'ArrowUp') s.y -= step;
+      if (key === 'ArrowDown') s.y += step;
+      if (key === 'ArrowLeft') s.x -= step;
+      if (key === 'ArrowRight') s.x += step;
+    } else if (s.type === 'line') {
+      if (key === 'ArrowUp') { s.y1 -= step; s.y2 -= step; }
+      if (key === 'ArrowDown') { s.y1 += step; s.y2 += step; }
+      if (key === 'ArrowLeft') { s.x1 -= step; s.x2 -= step; }
+      if (key === 'ArrowRight') { s.x1 += step; s.x2 += step; }
+    } else if (s.type === 'path') {
+      s.path.forEach(p => {
+        if (key === 'ArrowUp') p.y -= step;
+        if (key === 'ArrowDown') p.y += step;
+        if (key === 'ArrowLeft') p.x -= step;
+        if (key === 'ArrowRight') p.x += step;
+      });
+    }
+    this.draw();
+  }
+
+  deleteSelected() {
+    if (!this.selectedShape) return;
+    const layer = this.layers.find(l => l.id === this.selectedShape!.layerId);
+    if (layer) {
+      layer.shapes = layer.shapes.filter(s => s.id !== this.selectedShape!.shape.id);
+      this.selectedShape = null;
+      this.saveHistory();
+      this.draw();
+    }
   }
 
   moveLayer(id: string, delta: number) {
@@ -452,18 +529,6 @@ export class WhiteboardComponent implements AfterViewInit {
     this.initCanvas();
     this.resizeCanvas();
     window.addEventListener('resize', () => this.resizeCanvas());
-    
-    // Key bindings for undo/redo
-    window.addEventListener('keydown', (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
-        e.preventDefault();
-        this.undo();
-      }
-      if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
-        e.preventDefault();
-        this.redo();
-      }
-    });
   }
 
   initCanvas() {
@@ -484,38 +549,46 @@ export class WhiteboardComponent implements AfterViewInit {
   draw() {
     if (!this.ctx) return;
     const canvas = this.canvasRef.nativeElement;
-    
-    // Clear
     this.ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
-    // Draw layers from bottom to top (reverse array for painting order)
+    this.ctx.fillStyle = '#020617';
+    this.ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Grid dots
+    this.ctx.fillStyle = '#1e293b';
+    for (let x = 0; x < canvas.width; x += 24) {
+      for (let y = 0; y < canvas.height; y += 24) {
+        this.ctx.fillRect(x, y, 1, 1);
+      }
+    }
+
     [...this.layers].reverse().forEach(layer => {
       if (layer.visible) {
-        for (const shape of layer.shapes) {
-          this.renderShape(shape);
-        }
+        layer.shapes.forEach(shape => this.renderShape(shape));
       }
     });
 
-    if (this.currentShape) {
-      this.renderShape(this.currentShape);
-    }
+    if (this.currentShape) this.renderShape(this.currentShape);
   }
 
   renderShape(shape: Shape) {
     this.ctx.strokeStyle = shape.color;
-    this.ctx.lineWidth = shape.width || 3;
+    this.ctx.lineWidth = shape.width;
     this.ctx.fillStyle = shape.color;
     this.ctx.lineCap = 'round';
     this.ctx.lineJoin = 'round';
+
+    if (shape === this.selectedShape?.shape) {
+      this.ctx.setLineDash([5, 5]);
+      this.ctx.strokeStyle = '#3b82f6';
+    } else {
+      this.ctx.setLineDash([]);
+    }
 
     this.ctx.beginPath();
     if (shape.type === 'path') {
       if (shape.path.length > 0) {
         this.ctx.moveTo(shape.path[0].x, shape.path[0].y);
-        for (let i = 1; i < shape.path.length; i++) {
-          this.ctx.lineTo(shape.path[i].x, shape.path[i].y);
-        }
+        shape.path.forEach(p => this.ctx.lineTo(p.x, p.y));
         this.ctx.stroke();
       }
     } else if (shape.type === 'rect') {
@@ -529,19 +602,32 @@ export class WhiteboardComponent implements AfterViewInit {
       this.ctx.lineTo(shape.x2, shape.y2);
       this.ctx.stroke();
     } else if (shape.type === 'text') {
-      this.ctx.font = shape.font || '20px "Inter", sans-serif';
+      this.ctx.font = shape.font;
       this.ctx.fillText(shape.text, shape.x, shape.y);
     }
+    this.ctx.setLineDash([]);
   }
 
   setMode(m: ShapeMode) {
     this.mode.set(m);
+    this.selectedShape = null;
+    this.draw();
   }
 
   commitText(val: string) {
     if (!this.textInput.visible) return;
     if (val && val.trim()) {
-      this.activeLayer.shapes.push({ type: 'text', x: this.textInput.x, y: this.textInput.y, text: val.trim(), color: this.currentColor, font: this.currentFont });
+      this.activeLayer.shapes.push({ 
+        id: 's' + Date.now(),
+        type: 'text', 
+        x: this.textInput.x, 
+        y: this.textInput.y, 
+        text: val.trim(), 
+        color: this.currentColor, 
+        font: this.currentFont,
+        width: 2
+      });
+      this.saveHistory();
       this.draw();
     }
     this.textInput.visible = false;
@@ -549,78 +635,106 @@ export class WhiteboardComponent implements AfterViewInit {
 
   private getCoordinates(e: MouseEvent | TouchEvent) {
     const rect = this.canvasRef.nativeElement.getBoundingClientRect();
-    let clientX, clientY;
-
-    if (e instanceof TouchEvent) {
-      clientX = e.touches[0].clientX;
-      clientY = e.touches[0].clientY;
-    } else {
-      clientX = e.clientX;
-      clientY = e.clientY;
-    }
-    
+    const clientX = e instanceof TouchEvent ? e.touches[0].clientX : e.clientX;
+    const clientY = e instanceof TouchEvent ? e.touches[0].clientY : e.clientY;
     return { x: clientX - rect.left, y: clientY - rect.top };
   }
 
   onPointerDown(e: MouseEvent | TouchEvent) {
-    // Prevent default scrolling via touch
     if (e instanceof TouchEvent && e.cancelable) e.preventDefault();
-    
-    this.isDrawing = true;
     const { x, y } = this.getCoordinates(e);
+    this.dragStartPos = { x, y };
 
+    if (this.mode() === 'select') {
+      this.isDrawing = true;
+      this.handleSelection(x, y);
+      return;
+    }
+
+    this.isDrawing = true;
     const m = this.mode();
-    if (m === 'pen') {
-      this.currentShape = { type: 'path', path: [{x, y}], color: this.currentColor, width: this.currentWidth };
-    } else if (m === 'eraser') {
-      this.currentShape = { type: 'path', path: [{x, y}], color: '#020617', width: 20 };
-    } else if (m === 'rect') {
-      this.currentShape = { type: 'rect', x, y, w: 0, h: 0, color: this.currentColor, width: this.currentWidth };
-    } else if (m === 'circle') {
-      this.currentShape = { type: 'circle', x, y, r: 0, color: this.currentColor, width: this.currentWidth };
-    } else if (m === 'line') {
-      this.currentShape = { type: 'line', x1: x, y1: y, x2: x, y2: y, color: this.currentColor, width: this.currentWidth };
-    } else if (m === 'text') {
+    const id = 's' + Date.now();
+    if (m === 'pen') this.currentShape = { id, type: 'path', path: [{x, y}], color: this.currentColor, width: this.currentWidth };
+    else if (m === 'eraser') this.currentShape = { id, type: 'path', path: [{x, y}], color: '#020617', width: 20 };
+    else if (m === 'rect') this.currentShape = { id, type: 'rect', x, y, w: 0, h: 0, color: this.currentColor, width: this.currentWidth };
+    else if (m === 'circle') this.currentShape = { id, type: 'circle', x, y, r: 0, color: this.currentColor, width: this.currentWidth };
+    else if (m === 'line') this.currentShape = { id, type: 'line', x1: x, y1: y, x2: x, y2: y, color: this.currentColor, width: this.currentWidth };
+    else if (m === 'text') {
       this.textInput = { visible: true, x, y, text: '' };
-      setTimeout(() => {
-        const input = document.querySelector('input.z-50') as HTMLInputElement;
-        if (input) input.focus();
-      }, 0);
+      setTimeout(() => (document.querySelector('input.z-50') as HTMLInputElement)?.focus(), 0);
       this.isDrawing = false;
     }
     this.draw();
   }
 
-  onPointerMove(e: MouseEvent | TouchEvent) {
-    if (!this.isDrawing || !this.currentShape) return;
-    
-    if (e instanceof TouchEvent && e.cancelable) e.preventDefault();
-
-    const { x, y } = this.getCoordinates(e);
-    const m = this.mode();
-
-    if (m === 'pen' || m === 'eraser') {
-      this.currentShape.path.push({x, y});
-    } else if (m === 'rect') {
-      this.currentShape.w = x - this.currentShape.x;
-      this.currentShape.h = y - this.currentShape.y;
-    } else if (m === 'circle') {
-      const dx = x - this.currentShape.x;
-      const dy = y - this.currentShape.y;
-      this.currentShape.r = Math.sqrt(dx*dx + dy*dy);
-    } else if (m === 'line') {
-      this.currentShape.x2 = x;
-      this.currentShape.y2 = y;
+  handleSelection(x: number, y: number) {
+    for (const layer of this.layers) {
+      if (!layer.visible) continue;
+      for (const shape of [...layer.shapes].reverse()) {
+        if (this.isHit(shape, x, y)) {
+          this.selectedShape = { shape, layerId: layer.id };
+          this.activeLayerId = layer.id;
+          this.draw();
+          return;
+        }
+      }
     }
-    
+    this.selectedShape = null;
     this.draw();
   }
 
+  isHit(s: Shape, x: number, y: number): boolean {
+    if (s.type === 'rect') return x >= s.x && x <= s.x + s.w && y >= s.y && y <= s.y + s.h;
+    if (s.type === 'circle') return Math.sqrt((x - s.x)**2 + (y - s.y)**2) <= s.r + 5;
+    if (s.type === 'text') return Math.abs(x - s.x) < 50 && Math.abs(y - s.y) < 20;
+    if (s.type === 'line') {
+      const dist = Math.abs((s.y2 - s.y1)*x - (s.x2 - s.x1)*y + s.x2*s.y1 - s.y2*s.x1) / Math.sqrt((s.y2-s.y1)**2 + (s.x2-s.x1)**2);
+      return dist < 10;
+    }
+    if (s.type === 'path') {
+      return s.path.some(p => Math.sqrt((x - p.x)**2 + (y - p.y)**2) < 10);
+    }
+    return false;
+  }
+
+  onPointerMove(e: MouseEvent | TouchEvent) {
+    if (!this.isDrawing) return;
+    if (e instanceof TouchEvent && e.cancelable) e.preventDefault();
+    const { x, y } = this.getCoordinates(e);
+
+    if (this.mode() === 'select' && this.selectedShape) {
+      const dx = x - this.dragStartPos.x;
+      const dy = y - this.dragStartPos.y;
+      this.moveShape(this.selectedShape.shape, dx, dy);
+      this.dragStartPos = { x, y };
+      this.draw();
+      return;
+    }
+
+    if (!this.currentShape) return;
+    const m = this.mode();
+    if (m === 'pen' || m === 'eraser') this.currentShape.path.push({x, y});
+    else if (m === 'rect') { this.currentShape.w = x - this.currentShape.x; this.currentShape.h = y - this.currentShape.y; }
+    else if (m === 'circle') this.currentShape.r = Math.sqrt((x - this.currentShape.x)**2 + (y - this.currentShape.y)**2);
+    else if (m === 'line') { this.currentShape.x2 = x; this.currentShape.y2 = y; }
+    this.draw();
+  }
+
+  moveShape(s: Shape, dx: number, dy: number) {
+    if (s.type === 'rect' || s.type === 'circle' || s.type === 'text') { s.x += dx; s.y += dy; }
+    else if (s.type === 'line') { s.x1 += dx; s.y1 += dy; s.x2 += dx; s.y2 += dy; }
+    else if (s.type === 'path') s.path.forEach(p => { p.x += dx; p.y += dy; });
+  }
+
   onPointerUp() {
-    if (this.isDrawing && this.currentShape) {
-      this.activeLayer.shapes.push(this.currentShape);
-      this.currentShape = null;
-      this.saveHistory();
+    if (this.isDrawing) {
+      if (this.currentShape) {
+        this.activeLayer.shapes.push(this.currentShape);
+        this.currentShape = null;
+        this.saveHistory();
+      } else if (this.mode() === 'select' && this.selectedShape) {
+        this.saveHistory();
+      }
     }
     this.isDrawing = false;
     this.draw();
