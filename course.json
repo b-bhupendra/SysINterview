@@ -1,0 +1,261 @@
+[
+    {
+      "id": "url_shortener",
+      "title": "Designing a URL Shorting service like TinyURL",
+      "description": "Designing a URL Shorting service like TinyURL",
+      "difficulty": "Easy",
+      "requirements": ["Capacity Estimation (100:1 read/write ratio)", "System APIs (createURL, deleteURL)", "Database Design (NoSQL)", "Base62 Encoding vs. Key Generation Service (KGS)", "Data Partitioning (Range-based vs. Hash-based)", "Caching (Memcache, LRU policy)"],
+      "key_topics": [
+        "Capacity Estimation (100:1 read/write ratio)",
+        "System APIs (createURL, deleteURL)",
+        "Database Design (NoSQL)",
+        "Base62 Encoding vs. Key Generation Service (KGS)",
+        "Data Partitioning (Range-based vs. Hash-based)",
+        "Caching (Memcache, LRU policy)"
+      ],
+      "theory": "URL shortening creates shorter aliases for long URLs to save space. We can use a hash function on the original URL and encode it to Base62. Alternatively, generate random strings offline using a Key Generation Service.",
+      "components": ["Web Servers", "Key Generation Service (KGS)", "Used/Unused Key DB", "Cache", "Database (NoSQL)"],
+      "bottlenecks": ["Database read load can be a bottleneck.", "Adding a caching layer (LRU) helps.", "Single point of failure in KGS."],
+      "diagramHints": "Draw clients connecting to a Load Balancer, which routes to Web Servers. Web servers read from an in-memory Cache and a NoSQL Database. Show a background Key Generation Service populating the database with unused keys."
+    },
+    {
+      "id": "pastebin",
+      "title": "Designing Pastebin",
+      "description": "Designing Pastebin",
+      "difficulty": "Easy",
+      "requirements": [
+        "Read-heavy systems (5:1 read/write ratio)",
+        "Object storage for content (Amazon S3)",
+        "Metadata database layer",
+        "Key Generation Service (KGS)"
+      ],
+      "key_topics": [
+        "Read-heavy systems (5:1 read/write ratio)",
+        "Object storage for content (Amazon S3)",
+        "Metadata database layer",
+        "Key Generation Service (KGS)"
+      ],
+      "theory": "Pastebin allows users to store plain text. It requires generating a unique URL and storing potentially large text blocks. A KGS can be used to generate keys.",
+      "components": ["Key Generation Service", "Metadata Database", "Object Storage", "Cache"],
+      "bottlenecks": ["Handling massive read requests requires caching.", "Writing large text blocks limits concurrent connections."],
+      "diagramHints": "Show a split between Read Servers and Write Servers. Write servers talk to Object Storage for payloads and a Metadata DB for the URL mapping."
+    },
+    {
+      "id": "instagram",
+      "title": "Designing Instagram",
+      "description": "Designing Instagram",
+      "difficulty": "Medium",
+      "requirements": [
+        "Separating Read and Write services",
+        "Photo Metadata storage (Cassandra/Key-Value)",
+        "Data Sharding (UserID vs. PhotoID)",
+        "News Feed Generation (Pull vs. Push vs. Hybrid)",
+        "Pre-generating News Feeds"
+      ],
+      "key_topics": [
+        "Separating Read and Write services",
+        "Photo Metadata storage (Cassandra/Key-Value)",
+        "Data Sharding (UserID vs. PhotoID)",
+        "News Feed Generation (Pull vs. Push vs. Hybrid)",
+        "Pre-generating News Feeds"
+      ],
+      "theory": "Instagram is a read-heavy system. It stores user metadata, social graphs, and photos. Newsfeed is generated offline to ensure low latency.",
+      "components": ["Photo Storage", "Metadata DB", "Newsfeed Generation Service", "CDN"],
+      "bottlenecks": ["Generating newsfeeds synchronously is too slow.", "The social graph causes hotspots."],
+      "diagramHints": "Draw Image Storage, Metadata Storage, and a dedicated Newsfeed Generation Service. Show users uploading via Write API and pulling feeds via Read API."
+    },
+    {
+      "id": "dropbox",
+      "title": "Designing Dropbox",
+      "description": "Designing Dropbox",
+      "difficulty": "Medium",
+      "requirements": [
+        "File chunking (4MB chunks)",
+        "Synchronization Service",
+        "Message Queuing Service (Request/Response queues)",
+        "Data Deduplication (Post-process vs. In-line)",
+        "Client architecture (Watcher, Chunker, Indexer, Internal DB)"
+      ],
+      "key_topics": [
+        "File chunking (4MB chunks)",
+        "Synchronization Service",
+        "Message Queuing Service (Request/Response queues)",
+        "Data Deduplication (Post-process vs. In-line)",
+        "Client architecture (Watcher, Chunker, Indexer, Internal DB)"
+      ],
+      "theory": "Cloud storage syncs files between devices. We break files into smaller chunks. When a file is updated, only the modified chunk is synchronized.",
+      "components": ["Client Watcher/Chunker", "Block Storage", "Metadata DB", "Synchronization Service"],
+      "bottlenecks": ["Syncing chunks concurrently requires robust conflict resolution.", "Bandwidth is bottlenecked without chunking and deduplication."],
+      "diagramHints": "Draw the Chunker on the client side. The client talks to Block Servers directly for data uploading, and to Metadata Servers for syncing file structure."
+    },
+    {
+      "id": "facebook_messenger",
+      "title": "Designing Facebook Messenger",
+      "description": "Designing Facebook Messenger",
+      "difficulty": "Medium",
+      "requirements": [
+        "Push model using WebSockets / Long Polling",
+        "Message Sequencing",
+        "Wide-column database (HBase) for small updates",
+        "Managing Online/Offline status efficiently"
+      ],
+      "key_topics": [
+        "Push model using WebSockets / Long Polling",
+        "Message Sequencing",
+        "Wide-column database (HBase) for small updates",
+        "Managing Online/Offline status efficiently"
+      ],
+      "theory": "Chat systems require full-duplex communication for real-time delivery. Messages are stored persistently using a sequence number per user for ordering.",
+      "components": ["Chat Servers (WebSocket)", "Session/Presence Server", "NoSQL Database (HBase)"],
+      "bottlenecks": ["Managing millions of concurrent open HTTP connections.", "Presence service state changes cause huge fanout traffic."],
+      "diagramHints": "Show users connected to Chat Servers with persistent WebSockets. Chat Servers talk to a Presence DB and write to a massive NoSQL Database concurrently."
+    },
+    {
+      "id": "twitter",
+      "title": "Designing Twitter",
+      "description": "Designing Twitter",
+      "difficulty": "Medium",
+      "requirements": [
+        "Read-heavy traffic (100M uploads vs 28B views)",
+        "Sharding by TweetID + Epoch timestamp",
+        "Caching hot tweets (80-20 rule)",
+        "Load Balancing"
+      ],
+      "key_topics": [
+        "Read-heavy traffic (100M uploads vs 28B views)",
+        "Sharding by TweetID + Epoch timestamp",
+        "Caching hot tweets (80-20 rule)",
+        "Load Balancing"
+      ],
+      "theory": "Twitter is heavily read-biased. It revolves around a publish/subscribe fanout model. When a user posts, it 'fans out' to followers' timelines.",
+      "components": ["Write API servers", "Read API servers", "Fanout Service", "In-memory Cache", "Blob storage"],
+      "bottlenecks": ["Celebrity fanout can cause extreme latency.", "Using mixed models fixes this."],
+      "diagramHints": "Draw standard users publishing to a Fanout Service which pushes updates to Redis caches of followers. Show celebrity tweets being kept in a separate global Cache."
+    },
+    {
+      "id": "youtube_netflix",
+      "title": "Designing Youtube or Netflix",
+      "description": "Designing Youtube or Netflix",
+      "difficulty": "Medium",
+      "requirements": [
+        "Processing Queue for Video Encoding",
+        "Thumbnail storage (Bigtable)",
+        "Content Delivery Networks (CDN)",
+        "Video Deduplication"
+      ],
+      "key_topics": [
+        "Processing Queue for Video Encoding",
+        "Thumbnail storage (Bigtable)",
+        "Content Delivery Networks (CDN)",
+        "Video Deduplication"
+      ],
+      "theory": "Video streaming involves video ingestion, encoding into multiple formats, and streaming distribution via Content Delivery Networks (CDN).",
+      "components": ["Upload Servers", "Encoding Service", "CDN", "Metadata DB", "BigTable for Thumbnails"],
+      "bottlenecks": ["Serving videos directly from origin servers would crush bandwidth.", "Encoding videos synchronously slows down availability."],
+      "diagramHints": "Show Video Upload flow into a Processing Queue where Worker Nodes perform Encoding. Encoded videos are pushed to a CDN."
+    },
+    {
+      "id": "typeahead",
+      "title": "Designing Typeahead Suggestion",
+      "description": "Designing Typeahead Suggestion",
+      "difficulty": "Medium",
+      "requirements": [
+        "Trie Data Structure",
+        "Storing top suggestions at each node",
+        "Map-Reduce for frequency calculation",
+        "Data Partitioning by hash/prefix"
+      ],
+      "key_topics": [
+        "Trie Data Structure",
+        "Storing top suggestions at each node",
+        "Map-Reduce for frequency calculation",
+        "Data Partitioning by hash/prefix"
+      ],
+      "theory": "Typeahead implies real-time completion. Trie data structures are optimal for prefix-matching at high scale.",
+      "components": ["Trie Cache", "MapReduce clusters", "Log Aggregator", "Database"],
+      "bottlenecks": ["Updating the Trie in real-time is expensive. Updates should be done in background batches.", "Storing large Tries requires sharding."],
+      "diagramHints": "Draw users typing into an API which queries a 'Trie Cache'. Show backend MapReduce workers processing logs to update the global Trie."
+    },
+    {
+      "id": "api_rate_limiter",
+      "title": "Designing an API Rate Limiter",
+      "description": "Designing an API Rate Limiter",
+      "difficulty": "Medium",
+      "requirements": [
+        "Fixed Window vs. Rolling Window Algorithms",
+        "Sliding Window with Counters (Redis Hash)",
+        "IP vs. User based throttling"
+      ],
+      "key_topics": [
+        "Fixed Window vs. Rolling Window Algorithms",
+        "Sliding Window with Counters (Redis Hash)",
+        "IP vs. User based throttling"
+      ],
+      "theory": "Rate Limiting restricts traffic to protect APIs from abuse. Common algorithms include Fixed Window, Sliding Window Log, and Sliding Window Counters (most optimal memory).",
+      "components": ["API Gateway", "Rate Limiting Middleware", "Redis (timestamps/counters)", "Rules Engine"],
+      "bottlenecks": ["Race conditions in Redis when counting concurrently.", "Latency overhead of checking limits for every API call."],
+      "diagramHints": "Clients hit an API Gateway, which queries a Rate Limiter component. The Rate Limiter reads counters from Redis. If allowed, it forwards to Backend App Servers."
+    },
+    {
+      "id": "web_crawler",
+      "title": "Designing a Web Crawler",
+      "description": "Designing a Web Crawler",
+      "difficulty": "Hard",
+      "requirements": [
+        "URL Frontier (Breadth-first search)",
+        "Document Input Stream (DIS)",
+        "Dedupe Tests (Checksums, Bloom Filters)",
+        "Politeness constraints and robots.txt"
+      ],
+      "key_topics": [
+        "URL Frontier (Breadth-first search)",
+        "Document Input Stream (DIS)",
+        "Dedupe Tests (Checksums, Bloom Filters)",
+        "Politeness constraints and robots.txt"
+      ],
+      "theory": "Web crawling requires picking a seeds URL, fetching HTML, extracting links, and resolving duplicates efficiently.",
+      "components": ["URL Frontier", "HTML Fetcher", "DNS Resolver", "Content Seen Module", "URL Extractors"],
+      "bottlenecks": ["DNS resolution is extremely slow unless aggressively cached.", "Politeness rules prevent spamming a single domain."],
+      "diagramHints": "Draw a core loop: URL Frontier -> HTML Fetcher -> Content Seen Check -> Link Extractor -> URL Seen Check -> Back to URL Frontier."
+    },
+    {
+      "id": "facebook_newsfeed",
+      "title": "Designing Facebook's Newsfeed",
+      "description": "Designing Facebook's Newsfeed",
+      "difficulty": "Hard",
+      "requirements": [
+        "Offline Generation for Newsfeed",
+        "Fanout-on-write vs Fanout-on-load",
+        "Feed Ranking algorithms"
+      ],
+      "key_topics": [
+        "Offline Generation for Newsfeed",
+        "Fanout-on-write vs Fanout-on-load",
+        "Feed Ranking algorithms"
+      ],
+      "theory": "A newsfeed compiles updates from friends, pages, and groups. Offline generation provides sub-second latency.",
+      "components": ["Feed Generation Service", "Feed Ranking Engine", "Fanout Workers", "Graph API"],
+      "bottlenecks": ["Ranking algorithms are intensive.", "Huge datasets make real-time compilation impossible."],
+      "diagramHints": "Show a robust Fanout-on-write process updating follower cache lists. Display a fast Fanout-on-load process fetching data directly from cache."
+    },
+    {
+      "id": "yelp",
+      "title": "Designing Yelp or Nearby Friends",
+      "description": "Designing Yelp or Nearby Friends",
+      "difficulty": "Hard",
+      "requirements": [
+        "Location-based search",
+        "Proximity servers",
+        "QuadTrees and Grids (implied)"
+      ],
+      "key_topics": [
+        "Location-based search",
+        "Proximity servers",
+        "QuadTrees and Grids (implied)"
+      ],
+      "theory": "Location-based services use spatial indexing techniques like Geohash or QuadTrees to quickly find points of interest nearby.",
+      "components": ["QuadTree Index Servers", "Location Updates Service", "Places DB"],
+      "bottlenecks": ["Updating QuadTrees is complex if users are constantly moving (e.g. Uber). Yelp places are static, so it's easier.", "Extreme read-heavy loads for queries."],
+      "diagramHints": "Draw an LBS (Location Based Service) connecting to an in-memory QuadTree cluster, which occasionally syncs to a persistent spatial database."
+    }
+  ]

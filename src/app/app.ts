@@ -104,7 +104,7 @@ import { MatIconModule } from '@angular/material/icon';
                   <div class="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-[#ebe5db] to-transparent pointer-events-none"></div>
                   
                   <div class="max-w-xl mx-auto space-y-8 relative z-10">
-                     <p class="text-xs font-sans tracking-widest uppercase text-stone-400 font-bold mb-2">Architect's Reference</p>
+                     <p class="text-xs font-sans tracking-widest uppercase text-stone-400 font-bold mb-2">Architect's Reference &bull; {{activeScenario()?.difficulty || 'General'}}</p>
                      <h2 class="text-4xl font-bold tracking-tight text-stone-800">{{activeScenario()?.title}}</h2>
                      <p class="text-lg italic text-stone-600 font-medium">"{{activeScenario()?.description}}"</p>
                      
@@ -114,6 +114,19 @@ import { MatIconModule } from '@angular/material/icon';
                        </h3>
                        <p class="text-[15px] text-stone-700 leading-relaxed text-justify">{{activeScenario()?.theory || 'Theory not available offline.'}}</p>
                      </div>
+
+                     @if (activeScenario()?.key_topics) {
+                        <div class="space-y-4 pt-4">
+                          <h3 class="text-2xl font-bold text-stone-800 flex items-center gap-2 border-b-2 border-stone-200 pb-2">
+                            <mat-icon class="text-emerald-700">stars</mat-icon> Key Topics
+                          </h3>
+                          <ul class="flex flex-wrap gap-2 text-stone-700 text-[13px] leading-relaxed">
+                            @for (topic of activeScenario()?.key_topics; track topic) {
+                              <li class="bg-stone-200/60 px-3 py-1 rounded-full text-stone-700 border border-stone-300">{{topic}}</li>
+                            }
+                          </ul>
+                        </div>
+                     }
 
                      <div class="space-y-4 pt-4">
                        <h3 class="text-2xl font-bold text-stone-800 flex items-center gap-2 border-b-2 border-stone-200 pb-2">

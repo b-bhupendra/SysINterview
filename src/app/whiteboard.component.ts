@@ -22,11 +22,12 @@ type Shape = PathShape | RectShape | CircleShape | TextShape | LineShape;
         <input 
           #textInputField
           type="text"
-          class="absolute z-50 bg-slate-800 text-white outline-none border border-blue-500 rounded px-2 py-1 shadow-lg"
+          class="absolute z-50 bg-transparent outline-none border border-blue-500/50 focus:border-blue-500 border-dashed rounded px-1 py-0.5 shadow-xl"
           [style.left.px]="textInput.x"
           [style.top.px]="textInput.y - 12"
           [style.font]="currentFont"
           [style.color]="currentColor"
+          placeholder="Type here..."
           (keydown.enter)="commitText($any($event).target.value)"
           (blur)="commitText($any($event).target.value)"
         />

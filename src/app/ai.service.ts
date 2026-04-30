@@ -14,6 +14,28 @@ export interface LmStudioConfig {
   temperature: number;
 }
 
+const SYSTEM_PROMPT = `You are the "System Design Architect," an interactive, AI-powered tutor built to help software engineers master system design interviews. Your primary goal is to guide the user through complex architectural problems using the 7-step methodology:
+1. Requirements clarifications
+2. System interface definition
+3. Back-of-the-envelope estimation
+4. Defining data model
+5. High-level design
+6. Detailed design
+7. Identifying and resolving bottlenecks
+
+**Behavior & Constraints:**
+- **Interactive Mode:** Do not just give the user the final answer. Ask them to design the system step-by-step. Start by asking them to define the Functional and Non-Functional requirements for a chosen system.
+- **Evaluation:** When the user provides an answer, evaluate their math and logic. Gently correct them if they are wrong, and validate them if they are right.
+- **Visuals & Diagrams:** Whenever the user completes the "High-Level Design" phase, output a Mermaid.js diagram block so the front-end web app can render it.
+- **Adaptability:** Map all architectural discussions to the core concepts of Scalability, Consistency, Availability, Data Partitioning, and Caching.
+
+**Workflow:**
+1. Greet the user and ask which system they want to design from the curriculum.
+2. Prompt them to list the requirements (Step 1).
+3. Wait for their response. Provide feedback, then prompt them for the API definitions (Step 2).
+4. Continue this back-and-forth ping-pong interaction until all 7 steps are completed.
+5. Conclude with a rapid-fire technical trivia question related to the design.`;
+
 @Injectable({ providedIn: 'root' })
 export class AiService {
   isOfflineMode = signal(false);
@@ -80,7 +102,7 @@ export class AiService {
       const res = await fetch(modelsEndpoint);
       if (res.ok) {
         const data = await res.json();
-        const models = data.data.map((m: any) => m.id);
+        const models = data.data.map((m: { id: string }) => m.id);
         this.availableModels.set(models);
         if (models.length > 0 && !models.includes(this.lmConfig().model)) {
           this.lmConfig.update(c => ({...c, model: models[0]}));
@@ -120,7 +142,7 @@ export class AiService {
 
     try {
       const prompt = context 
-        ? `Scenario Context: ${context}\n\nUser: ${message}\n\nPlease act as a system design interviewer and assistant. Keep answers concise, and focus on scalable systems concepts.`
+        ? `Scenario Context: ${context}\n\nUser: ${message}`
         : message;
 
       if (useLmStudio) {
@@ -130,7 +152,7 @@ export class AiService {
           body: JSON.stringify({
             model: this.lmConfig().model,
             messages: [
-              { role: 'system', content: 'You are an expert system design interviewer.' },
+              { role: 'system', content: SYSTEM_PROMPT },
               { role: 'user', content: prompt }
             ],
             temperature: this.lmConfig().temperature
@@ -144,6 +166,9 @@ export class AiService {
         const response = await ai.models.generateContent({
           model: 'gemini-2.5-flash',
           contents: prompt,
+          config: {
+            systemInstruction: SYSTEM_PROMPT,
+          }
         });
 
         this.messages.update(m => [...m, { role: 'assistant', text: response.text || 'No response.' }]);
