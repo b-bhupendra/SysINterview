@@ -1,5 +1,5 @@
-import { ChangeDetectionStrategy, Component, signal } from '@angular/core';
-import { SCENARIOS, SystemDesignScenario } from './knowledge-base';
+import { ChangeDetectionStrategy, Component, signal, computed } from '@angular/core';
+import { SCENARIOS, FUNDAMENTALS, SystemDesignScenario, Fundamental } from './knowledge-base';
 import { WhiteboardComponent } from './whiteboard.component';
 import { AiAssistantComponent } from './ai-assistant.component';
 import { MatIconModule } from '@angular/material/icon';
@@ -22,46 +22,96 @@ import { MatIconModule } from '@angular/material/icon';
           <p class="text-[11px] text-slate-400 mt-2 leading-relaxed italic">System design interview prep and collaborative problem-solving knowledge base.</p>
         </div>
         
-        <div class="flex-1 overflow-y-auto p-4 space-y-3">
-           <h3 class="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Scenarios</h3>
-           @for (scenario of scenarios; track scenario.id) {
-             <button 
-                (click)="selectScenario(scenario)"
-                class="w-full text-left p-3 rounded-lg border transition-all outline-none focus:ring-1 focus:ring-blue-500 group"
-                [class.bg-blue-600]="activeScenario()?.id === scenario.id"
-                [class.border-blue-500]="activeScenario()?.id === scenario.id"
-                [class.text-white]="activeScenario()?.id === scenario.id"
-                [class.bg-slate-800/50]="activeScenario()?.id !== scenario.id"
-                [class.border-slate-700/50]="activeScenario()?.id !== scenario.id"
-                [class.hover:bg-slate-800]="activeScenario()?.id !== scenario.id"
+        <div class="flex-1 overflow-y-auto flex flex-col p-4 space-y-6">
+           <div class="relative">
+             <mat-icon class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-[18px] w-[18px] h-[18px]">search</mat-icon>
+             <input 
+               type="text" 
+               [value]="searchQuery()" 
+               (input)="searchQuery.set($any($event).target.value)"
+               placeholder="Find a topic..." 
+               class="w-full bg-slate-800 border border-slate-700 rounded-lg py-2 pl-10 pr-4 text-xs font-medium text-slate-200 focus:outline-none focus:border-blue-500 transition-all shadow-inner"
              >
-                <div class="text-[11px] font-medium truncate flex items-center space-x-2"
-                     [class.text-white]="activeScenario()?.id === scenario.id"
-                     [class.text-slate-300]="activeScenario()?.id !== scenario.id"
-                >
-                  <mat-icon class="text-[16px] h-[16px] w-[16px]">description</mat-icon>
-                  <span>{{scenario.title}}</span>
-                </div>
-                <p class="text-[10px] leading-snug italic mt-2 line-clamp-2"
-                   [class.text-blue-200]="activeScenario()?.id === scenario.id"
-                   [class.text-slate-500]="activeScenario()?.id !== scenario.id"
-                >
-                   "{{scenario.description}}"
-                </p>
-                <button (click)="toggleBook(scenario, $event)"
-                   class="mt-3 w-full py-1.5 flex items-center justify-center gap-1.5 text-[11px] rounded transition-colors font-medium border"
-                   [class.bg-blue-500]="activeScenario()?.id === scenario.id"
+           </div>
+
+           <div>
+              <h3 class="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+                <div class="w-1.5 h-1.5 rounded-full bg-blue-500"></div>
+                Case Studies
+              </h3>
+              <div class="space-y-3">
+                 @for (scenario of filteredScenarios(); track scenario.id) {
+                   <button 
+                      (click)="selectScenario(scenario)"
+                   class="w-full text-left p-3 rounded-xl border transition-all outline-none focus:ring-1 focus:ring-blue-500 group relative overflow-hidden"
+                   [class.bg-blue-600]="activeScenario()?.id === scenario.id"
+                   [class.border-blue-500]="activeScenario()?.id === scenario.id"
                    [class.text-white]="activeScenario()?.id === scenario.id"
-                   [class.border-blue-400]="activeScenario()?.id === scenario.id"
-                   [class.hover:bg-blue-400]="activeScenario()?.id === scenario.id"
-                   [class.bg-slate-800/80]="activeScenario()?.id !== scenario.id"
-                   [class.border-slate-700]="activeScenario()?.id !== scenario.id"
-                   [class.text-slate-300]="activeScenario()?.id !== scenario.id"
-                   [class.hover:bg-slate-700]="activeScenario()?.id !== scenario.id"
+                   [class.bg-slate-800/50]="activeScenario()?.id !== scenario.id"
+                   [class.border-slate-700/50]="activeScenario()?.id !== scenario.id"
+                   [class.hover:bg-slate-800]="activeScenario()?.id !== scenario.id"
                 >
-                   <mat-icon class="text-[16px] w-[16px] h-[16px]">menu_book</mat-icon> Open Handbook
+                   <div class="text-[11px] font-bold truncate flex items-center space-x-2"
+                        [class.text-white]="activeScenario()?.id === scenario.id"
+                        [class.text-slate-100]="activeScenario()?.id !== scenario.id"
+                   >
+                     <mat-icon class="text-[16px] h-[16px] w-[16px]">{{ activeScenario()?.id === scenario.id ? 'psychology' : 'description' }}</mat-icon>
+                     <span>{{scenario.title}}</span>
+                   </div>
+                   
+                   <div class="flex items-center gap-2 mt-2">
+                      <span class="text-[9px] font-bold uppercase py-0.5 px-1.5 rounded"
+                            [class.bg-blue-500]="activeScenario()?.id === scenario.id"
+                            [class.bg-slate-700]="activeScenario()?.id !== scenario.id"
+                            [class.text-blue-100]="activeScenario()?.id === scenario.id"
+                            [class.text-slate-400]="activeScenario()?.id !== scenario.id"
+                      >
+                        {{scenario.difficulty}}
+                      </span>
+                      <p class="text-[10px] leading-snug italic truncate flex-1"
+                         [class.text-blue-200]="activeScenario()?.id === scenario.id"
+                         [class.text-slate-500]="activeScenario()?.id !== scenario.id"
+                      >
+                         "{{scenario.description}}"
+                      </p>
+                   </div>
+
+                   <button (click)="toggleBook(scenario, $event)"
+                      class="mt-3 w-full py-2 flex items-center justify-center gap-1.5 text-[11px] rounded-lg transition-all font-bold border transform active:scale-[0.98]"
+                      [class.bg-white]="activeScenario()?.id === scenario.id"
+                      [class.text-blue-600]="activeScenario()?.id === scenario.id"
+                      [class.border-white]="activeScenario()?.id === scenario.id"
+                      [class.hover:bg-blue-50]="activeScenario()?.id === scenario.id"
+                      [class.bg-slate-800/80]="activeScenario()?.id !== scenario.id"
+                      [class.border-slate-700]="activeScenario()?.id !== scenario.id"
+                      [class.text-slate-300]="activeScenario()?.id !== scenario.id"
+                      [class.hover:bg-slate-700]="activeScenario()?.id !== scenario.id"
+                   >
+                      <mat-icon class="text-[16px] w-[16px] h-[16px]">menu_book</mat-icon> Open Handbook
+                   </button>
                 </button>
-             </button>
+              }
+           </div>
+         </div>
+
+           @if (filteredFundamentals().length > 0) {
+             <div>
+                <h3 class="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+                  <div class="w-1.5 h-1.5 rounded-full bg-amber-500"></div>
+                  Architect's Glossary
+                </h3>
+                <div class="space-y-2">
+                   @for (fnd of filteredFundamentals(); track fnd.name) {
+                     <div class="p-3 rounded-lg border border-slate-700/50 bg-slate-800/30 group hover:border-slate-600 transition-colors">
+                        <div class="text-[11px] font-bold text-amber-200 mb-1">{{fnd.name}}</div>
+                        <p class="text-[10px] text-slate-400 leading-normal">{{fnd.definition}}</p>
+                        <div class="mt-2 pt-2 border-t border-slate-700/50 text-[9px] text-slate-500 italic">
+                          <span class="font-bold text-slate-400">Use Case:</span> {{fnd.use_case}}
+                        </div>
+                     </div>
+                   }
+                </div>
+             </div>
            }
         </div>
       </aside>
@@ -141,6 +191,15 @@ import { MatIconModule } from '@angular/material/icon';
                          }
                        </ul>
                      </div>
+
+                     @if (activeScenario()?.deep_dive) {
+                        <div class="space-y-4 pt-6 bg-amber-50/50 p-6 rounded-xl border border-amber-100 italic">
+                          <h3 class="text-xl font-bold text-amber-900 flex items-center gap-2 underline decoration-amber-300">
+                             <mat-icon class="text-amber-600">psychology</mat-icon> Deep Dive
+                          </h3>
+                          <p class="text-[14px] text-stone-800 leading-relaxed">{{activeScenario()?.deep_dive}}</p>
+                        </div>
+                     }
                   </div>
                </div>
 
@@ -163,9 +222,17 @@ import { MatIconModule } from '@angular/material/icon';
                      </div>
 
                      <div class="space-y-4 pt-6">
-                       <h3 class="text-2xl font-bold text-stone-800 flex items-center gap-2 border-b-2 border-stone-200 pb-2">
-                         <mat-icon class="text-amber-700">draw</mat-icon> Architect's Sketchpad
-                       </h3>
+                       <div class="flex items-center justify-between border-b-2 border-stone-200 pb-2">
+                          <h3 class="text-2xl font-bold text-stone-800 flex items-center gap-2">
+                            <mat-icon class="text-amber-700">draw</mat-icon> Architect's Sketchpad
+                          </h3>
+                          <button 
+                             (click)="copyDiagramHints()"
+                             class="px-3 py-1 bg-stone-200 text-stone-700 text-[10px] font-bold rounded uppercase tracking-wider hover:bg-stone-300 transition-colors flex items-center gap-1 shadow-sm"
+                          >
+                             <mat-icon class="text-[14px] w-[14px] h-[14px]">content_copy</mat-icon> Copy Hints
+                          </button>
+                       </div>
                        <div class="bg-[#f2efe9] p-6 rounded-lg text-stone-800 text-[15px] leading-relaxed border border-stone-300 shadow-inner font-sans">
                          {{activeScenario()?.diagramHints || 'No diagram hints available.'}}
                        </div>
@@ -193,9 +260,29 @@ import { MatIconModule } from '@angular/material/icon';
   `
 })
 export class App {
-  scenarios = SCENARIOS;
+  fundamentals = FUNDAMENTALS;
+  searchQuery = signal('');
   activeScenario = signal<SystemDesignScenario | null>(null);
   bookMode = signal<boolean>(false);
+
+  filteredScenarios = computed(() => {
+    const query = this.searchQuery().toLowerCase();
+    if (!query) return SCENARIOS;
+    return SCENARIOS.filter(s => 
+      s.title.toLowerCase().includes(query) || 
+      s.description.toLowerCase().includes(query) ||
+      s.key_topics?.some(t => t.toLowerCase().includes(query))
+    );
+  });
+
+  filteredFundamentals = computed(() => {
+    const query = this.searchQuery().toLowerCase();
+    if (!query) return FUNDAMENTALS;
+    return FUNDAMENTALS.filter(f => 
+      f.name.toLowerCase().includes(query) || 
+      f.definition.toLowerCase().includes(query)
+    );
+  });
 
   selectScenario(scenario: SystemDesignScenario) {
     this.activeScenario.set(scenario);
@@ -208,5 +295,12 @@ export class App {
       this.activeScenario.set(scenario);
     }
     this.bookMode.set(!this.bookMode());
+  }
+
+  copyDiagramHints() {
+    const hints = this.activeScenario()?.diagramHints;
+    if (hints) {
+      navigator.clipboard.writeText(hints);
+    }
   }
 }

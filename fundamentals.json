@@ -1,0 +1,37 @@
+[
+    {
+      "name": "CAP Theorem",
+      "definition": "States that a distributed data store can only provide two of three guarantees: Consistency, Availability, and Partition Tolerance. In the presence of a network partition (P), one must choose between Consistency (C) or Availability (A).",
+      "use_case": "Use CP for banking (Consistency); Use AP for social media feeds (Availability)."
+    },
+    {
+      "name": "Consistent Hashing",
+      "definition": "A hashing technique that maps data to a circle (ring) and assigns nodes to the same circle. When a node is added/removed, only 1/n of keys need to be remapped.",
+      "use_case": "Load balancing across cache servers (Memcached/Redis) to minimize cache misses during scaling."
+    },
+    {
+      "name": "Load Balancing",
+      "definition": "Distributing incoming network traffic across multiple servers. Layer 4 (Transport) vs Layer 7 (Application) are common types.",
+      "use_case": "Scale horizontally by adding more web servers behind an Nginx or AWS ELB."
+    },
+    {
+      "name": "Caching (LRU)",
+      "definition": "Storing frequently accessed data in memory (RAM) for fast retrieval. Least Recently Used (LRU) is a common eviction policy.",
+      "use_case": "Storing user profiles in Redis to avoid hitting the main database for every page load."
+    },
+    {
+      "name": "Data Sharding",
+      "definition": "Breaking a large database into smaller, faster, more easily managed parts called shards. Sharding can be based on UserID, Range, or Hash.",
+      "use_case": "Splitting a 10TB user table across 10 different SQL instances."
+    },
+    {
+      "name": "Database Isolation Levels",
+      "definition": "Degree to which one transaction is isolated from others. Levels: Read Uncommitted, Read Committed, Repeatable Read, Serializable.",
+      "use_case": "Preventing 'Dirty Reads' or 'Phantom Reads' in financial transactions."
+    },
+    {
+      "name": "Message Queues",
+      "definition": "Asynchronous communication channel that decouples producers and consumers. Provides durability and back-pressure management.",
+      "use_case": "Processing video uploads in the background while notifying the user immediately."
+    }
+]

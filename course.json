@@ -1,261 +1,364 @@
 [
     {
       "id": "url_shortener",
-      "title": "Designing a URL Shorting service like TinyURL",
-      "description": "Designing a URL Shorting service like TinyURL",
+      "title": "URL Shortener (TinyURL)",
+      "description": "High-availability service to map long URLs to 6-7 character aliases.",
       "difficulty": "Easy",
-      "requirements": ["Capacity Estimation (100:1 read/write ratio)", "System APIs (createURL, deleteURL)", "Database Design (NoSQL)", "Base62 Encoding vs. Key Generation Service (KGS)", "Data Partitioning (Range-based vs. Hash-based)", "Caching (Memcache, LRU policy)"],
-      "key_topics": [
+      "requirements": [
         "Capacity Estimation (100:1 read/write ratio)",
-        "System APIs (createURL, deleteURL)",
-        "Database Design (NoSQL)",
-        "Base62 Encoding vs. Key Generation Service (KGS)",
-        "Data Partitioning (Range-based vs. Hash-based)",
-        "Caching (Memcache, LRU policy)"
+        "Base62 Encoding (a-z, A-Z, 0-9)",
+        "Key Generation Service (KGS) for offline key production",
+        "Data Partitioning (Hash-based sharding)",
+        "Cache Expiration (LRU Policy)",
+        "High Availability (No SPOF)"
       ],
-      "theory": "URL shortening creates shorter aliases for long URLs to save space. We can use a hash function on the original URL and encode it to Base62. Alternatively, generate random strings offline using a Key Generation Service.",
-      "components": ["Web Servers", "Key Generation Service (KGS)", "Used/Unused Key DB", "Cache", "Database (NoSQL)"],
-      "bottlenecks": ["Database read load can be a bottleneck.", "Adding a caching layer (LRU) helps.", "Single point of failure in KGS."],
-      "diagramHints": "Draw clients connecting to a Load Balancer, which routes to Web Servers. Web servers read from an in-memory Cache and a NoSQL Database. Show a background Key Generation Service populating the database with unused keys."
+      "key_topics": [
+        "Base62 vs MD5/SHA",
+        "KGS (Key Generation Service)",
+        "Bloom Filters (for URL existence check)",
+        "Redis Caching Strategy"
+      ],
+      "theory": "The core challenge is generating unique, short keys without collisions. Using a 6-character Base62 string allows for 62^6 (~56.8 billion) unique URLs. To avoid runtime collisions and latency from DB checks, a 'Key Generation Service' (KGS) pre-calculates unique keys and stores them in a 'Used' vs 'Unused' table. When a write request arrives, the application server fetches a key from KGS, ensuring O(1) response time. For scaling, URLs are sharded by the Alias (Hash(Alias) % NumberOfShards).",
+      "components": [
+        "API Gateway (Rate Limiting)",
+        "KGS Cluster (Active-Passive for HA)",
+        "Metadata DB (NoSQL like Cassandra for write-heavy capability)",
+        "Redis Cache (80/20 rule application)",
+        "Zookeeper (Managing KGS key ranges)"
+      ],
+      "bottlenecks": [
+        "DB Read Throughput: Solved by Redis clusters.",
+        "KGS Scalability: Use Zookeeper to assign unique key ranges to different KGS nodes.",
+        "Data Growth: Implement TTL (Time-To-Live) for expired URLs."
+      ],
+      "diagramHints": "1. FLOW: Client -> Load Balancer -> Web Server. 2. LINK: Web Server -> KGS (to get a new key). 3. DRAW: KGS pulling from an 'Offline Key DB'. 4. LINK: Web Server -> Cassandra (storing long URL map). 5. SHOW: Redis cache intercepting read requests."
     },
     {
       "id": "pastebin",
-      "title": "Designing Pastebin",
-      "description": "Designing Pastebin",
+      "title": "Pastebin Service",
+      "description": "Text storage service focusing on large payloads and retrieval efficiency.",
       "difficulty": "Easy",
       "requirements": [
-        "Read-heavy systems (5:1 read/write ratio)",
-        "Object storage for content (Amazon S3)",
-        "Metadata database layer",
-        "Key Generation Service (KGS)"
+        "Object Storage (S3) for content",
+        "Relational Metadata (SQL)",
+        "Custom Expiration (TTL)",
+        "Analytics (View counts)",
+        "Rate Limiting per User"
       ],
       "key_topics": [
-        "Read-heavy systems (5:1 read/write ratio)",
-        "Object storage for content (Amazon S3)",
-        "Metadata database layer",
-        "Key Generation Service (KGS)"
+        "Metadata vs Payload separation",
+        "Object Storage block sizes",
+        "Secondary Indexing in SQL",
+        "CDN for popular pastes"
       ],
-      "theory": "Pastebin allows users to store plain text. It requires generating a unique URL and storing potentially large text blocks. A KGS can be used to generate keys.",
-      "components": ["Key Generation Service", "Metadata Database", "Object Storage", "Cache"],
-      "bottlenecks": ["Handling massive read requests requires caching.", "Writing large text blocks limits concurrent connections."],
-      "diagramHints": "Show a split between Read Servers and Write Servers. Write servers talk to Object Storage for payloads and a Metadata DB for the URL mapping."
+      "theory": "Pastebin mirrors URL shortening but with much larger payloads. The architecture must separate Metadata (PasteID, CreationDate, Expiry, UserID) from the Actual Content (Raw Text). Metadata is stored in a relational DB for efficient querying, while Content is stored in an Object Store (Amazon S3). When a user requests a paste, the server fetches metadata to verify expiry/permissions, then retrieves the payload from S3. For frequent reads, a CDN or Redis cache stores the raw text.",
+      "components": [
+        "Object Store (S3)",
+        "Metadata Service (PostgreSQL/MySQL)",
+        "Cleanup Worker (Deleting expired pastes)",
+        "KGS Cluster",
+        "Analytics Worker (Kafka -> Clickhouse)"
+      ],
+      "bottlenecks": [
+        "S3 costs: Use data compression (Gzip) before storage.",
+        "Database Sharding: Shard metadata by 'PasteID' to distribute read load.",
+        "Bandwidth: Huge pastes can saturate network; implement egress limiters."
+      ],
+      "diagramHints": "1. SPLIT: Metadata Path vs Data Path. 2. BOX: 'Object Storage' (S3). 3. DRAW: 'Cleanup Service' as a CRON job hitting the Metadata DB. 4. LINK: Analytics Service to a Message Queue."
     },
     {
       "id": "instagram",
-      "title": "Designing Instagram",
-      "description": "Designing Instagram",
+      "title": "Instagram / Photo Sharing",
+      "description": "Massive scale photo upload and timeline generation system.",
       "difficulty": "Medium",
       "requirements": [
-        "Separating Read and Write services",
-        "Photo Metadata storage (Cassandra/Key-Value)",
-        "Data Sharding (UserID vs. PhotoID)",
-        "News Feed Generation (Pull vs. Push vs. Hybrid)",
-        "Pre-generating News Feeds"
+        "High availability over Consistency",
+        "Photo Metadata (NoSQL/Cassandra)",
+        "Push vs. Pull Feed Models",
+        "Celebrity Fan-out Problem",
+        "CDN Edge Deployment"
       ],
       "key_topics": [
-        "Separating Read and Write services",
-        "Photo Metadata storage (Cassandra/Key-Value)",
-        "Data Sharding (UserID vs. PhotoID)",
-        "News Feed Generation (Pull vs. Push vs. Hybrid)",
-        "Pre-generating News Feeds"
+        "Fan-out on Write vs Read",
+        "Sharding by UserID vs PhotoID",
+        "Secondary Indices for Search",
+        "Geographical Replication"
       ],
-      "theory": "Instagram is a read-heavy system. It stores user metadata, social graphs, and photos. Newsfeed is generated offline to ensure low latency.",
-      "components": ["Photo Storage", "Metadata DB", "Newsfeed Generation Service", "CDN"],
-      "bottlenecks": ["Generating newsfeeds synchronously is too slow.", "The social graph causes hotspots."],
-      "diagramHints": "Draw Image Storage, Metadata Storage, and a dedicated Newsfeed Generation Service. Show users uploading via Write API and pulling feeds via Read API."
-    },
-    {
-      "id": "dropbox",
-      "title": "Designing Dropbox",
-      "description": "Designing Dropbox",
-      "difficulty": "Medium",
-      "requirements": [
-        "File chunking (4MB chunks)",
-        "Synchronization Service",
-        "Message Queuing Service (Request/Response queues)",
-        "Data Deduplication (Post-process vs. In-line)",
-        "Client architecture (Watcher, Chunker, Indexer, Internal DB)"
+      "theory": "In Instagram, generating the News Feed is the bottleneck. The 'Push Model' (Fan-out on Write) pre-generates feeds: when a user uploads a photo, it's injected into the timeline caches of all followers. However, for 'Hot' users (celebrities with millions of followers), a push model causes a 'thundering herd' at write-time. Solution: A Hybrid approach where standard users use 'Push' and Celebrities use 'Pull' (followers fetch their photos at read-time and merge with their cached feed).",
+      "components": [
+        "Media Store (S3)",
+        "Metadata Store (Cassandra - optimized for large writes)",
+        "Social Graph DB (Neo4j or sharded SQL)",
+        "Feed Generation Workers (Kafka consumers)",
+        "CDN (Cloudfront/Fastly)"
       ],
-      "key_topics": [
-        "File chunking (4MB chunks)",
-        "Synchronization Service",
-        "Message Queuing Service (Request/Response queues)",
-        "Data Deduplication (Post-process vs. In-line)",
-        "Client architecture (Watcher, Chunker, Indexer, Internal DB)"
+      "bottlenecks": [
+        "Metadata Sharding: Sharding by PhotoID causes cross-node queries for a user's feed. Shard by UserID instead.",
+        "Storage: Petabytes of images. Use deduplication and tiered storage (Hot/Warm/Cold).",
+        "Consistency: Eventual consistency is sufficient for 'Likes' and 'Comments'."
       ],
-      "theory": "Cloud storage syncs files between devices. We break files into smaller chunks. When a file is updated, only the modified chunk is synchronized.",
-      "components": ["Client Watcher/Chunker", "Block Storage", "Metadata DB", "Synchronization Service"],
-      "bottlenecks": ["Syncing chunks concurrently requires robust conflict resolution.", "Bandwidth is bottlenecked without chunking and deduplication."],
-      "diagramHints": "Draw the Chunker on the client side. The client talks to Block Servers directly for data uploading, and to Metadata Servers for syncing file structure."
+      "diagramHints": "1. BOX: 'Media API' and 'Feed API'. 2. PATH: Upload -> S3 -> Fan-out Workers -> Redis (Feed Cache). 3. LINK: Mobile App -> CDN for image binaries. 4. SHOW: Social Graph DB separately."
     },
     {
       "id": "facebook_messenger",
-      "title": "Designing Facebook Messenger",
-      "description": "Designing Facebook Messenger",
+      "title": "Facebook Messenger / WhatsApp",
+      "description": "Real-time messaging with delivery guarantees and status tracking.",
       "difficulty": "Medium",
       "requirements": [
-        "Push model using WebSockets / Long Polling",
-        "Message Sequencing",
-        "Wide-column database (HBase) for small updates",
-        "Managing Online/Offline status efficiently"
+        "Low Latency (<100ms)",
+        "Persistent Connections (WebSockets)",
+        "Message Sequencing (Lamport clocks/Snowflake)",
+        "Online/Offline Presence",
+        "Last Seen / Read Receipts"
       ],
       "key_topics": [
-        "Push model using WebSockets / Long Polling",
-        "Message Sequencing",
-        "Wide-column database (HBase) for small updates",
-        "Managing Online/Offline status efficiently"
+        "WebSockets vs Long Polling",
+        "HBase for message archival",
+        "Consistent Hashing for Chat Servers",
+        "Push Notifications (FCM/APNS)"
       ],
-      "theory": "Chat systems require full-duplex communication for real-time delivery. Messages are stored persistently using a sequence number per user for ordering.",
-      "components": ["Chat Servers (WebSocket)", "Session/Presence Server", "NoSQL Database (HBase)"],
-      "bottlenecks": ["Managing millions of concurrent open HTTP connections.", "Presence service state changes cause huge fanout traffic."],
-      "diagramHints": "Show users connected to Chat Servers with persistent WebSockets. Chat Servers talk to a Presence DB and write to a massive NoSQL Database concurrently."
+      "theory": "Chat systems rely on Bi-directional communication (WebSockets). To maintain ordered messages in a distributed system, we avoid wall-clock timestamps and use monotonically increasing sequence numbers per conversation. For storage, Wide-Column stores (HBase) are ideal because they handle rapid, small writes efficiently and provide fast range scans for message history. Presence (Online/Offline) is tracked via heartbeats: if a client misses 3 heartbeats, it's marked offline.",
+      "components": [
+        "Chat Gateway (WebSocket Service)",
+        "Presence Service",
+        "Message Store (HBase)",
+        "User Session DB (Redis)",
+        "Notification Engine"
+      ],
+      "bottlenecks": [
+        "Fan-out on Presence: Updating 1000 friends about 1 user's status. Solved by status pulling or limiting push to active view.",
+        "Connection Scaling: Use a load balancer with Sticky Sessions or Consistent Hashing to keep users on the same Chat Server.",
+        "Storage: Billions of small messages. Use TTLs for transient chats."
+      ],
+      "diagramHints": "1. DRAW: Users connected via 'Sticky WebSockets' to Gateway. 2. LINK: Gateway -> Redis (for session info). 3. BOX: HBase for permanent storage. 4. PATH: Presence heartbeat -> Presence Service -> Database."
     },
     {
       "id": "twitter",
-      "title": "Designing Twitter",
-      "description": "Designing Twitter",
+      "title": "Twitter / X",
+      "description": "Global distributed microblogging with real-time search.",
       "difficulty": "Medium",
       "requirements": [
-        "Read-heavy traffic (100M uploads vs 28B views)",
-        "Sharding by TweetID + Epoch timestamp",
-        "Caching hot tweets (80-20 rule)",
-        "Load Balancing"
+        "Timeline Construction",
+        "Global Search (Earlybird)",
+        "Retweet/Quote Logic",
+        "Snowflake ID generation"
       ],
       "key_topics": [
-        "Read-heavy traffic (100M uploads vs 28B views)",
-        "Sharding by TweetID + Epoch timestamp",
-        "Caching hot tweets (80-20 rule)",
-        "Load Balancing"
+        "Timeline Cache (Redis)",
+        "Inverted Index for Search",
+        "Snowflake (64-bit ID)",
+        "Pre-computation of feeds"
       ],
-      "theory": "Twitter is heavily read-biased. It revolves around a publish/subscribe fanout model. When a user posts, it 'fans out' to followers' timelines.",
-      "components": ["Write API servers", "Read API servers", "Fanout Service", "In-memory Cache", "Blob storage"],
-      "bottlenecks": ["Celebrity fanout can cause extreme latency.", "Using mixed models fixes this."],
-      "diagramHints": "Draw standard users publishing to a Fanout Service which pushes updates to Redis caches of followers. Show celebrity tweets being kept in a separate global Cache."
-    },
-    {
-      "id": "youtube_netflix",
-      "title": "Designing Youtube or Netflix",
-      "description": "Designing Youtube or Netflix",
-      "difficulty": "Medium",
-      "requirements": [
-        "Processing Queue for Video Encoding",
-        "Thumbnail storage (Bigtable)",
-        "Content Delivery Networks (CDN)",
-        "Video Deduplication"
+      "theory": "Twitter's architecture is read-optimized. The Home Timeline is pre-computed and stored in Redis. When a user tweets, it fans out to followers' Redis lists. The Search system uses an Inverted Index, but since tweets are short and real-time, the index must be rebuilt in memory (Earlybird service). Global ordering is ensured by Snowflake IDs, which incorporate high-precision timestamps, worker IDs, and sequences to remain unique and sortable without a central coordinator.",
+      "components": [
+        "Tweet Ingestion Service",
+        "Fan-out Workers",
+        "Timeline Cache (Redis Cluster)",
+        "Search Indexer (Lucene based)",
+        "ID Generator (Snowflake)"
       ],
-      "key_topics": [
-        "Processing Queue for Video Encoding",
-        "Thumbnail storage (Bigtable)",
-        "Content Delivery Networks (CDN)",
-        "Video Deduplication"
+      "bottlenecks": [
+        "Search Latency: Ranking billions of tweets in real-time. Solved by distributing search queries across many 'search nodes' and merging results.",
+        "Hot Shards: Popular topics or users hitting one DB partition. Solved by dynamic sharding.",
+        "Rate Limiting: Massive bot traffic protection."
       ],
-      "theory": "Video streaming involves video ingestion, encoding into multiple formats, and streaming distribution via Content Delivery Networks (CDN).",
-      "components": ["Upload Servers", "Encoding Service", "CDN", "Metadata DB", "BigTable for Thumbnails"],
-      "bottlenecks": ["Serving videos directly from origin servers would crush bandwidth.", "Encoding videos synchronously slows down availability."],
-      "diagramHints": "Show Video Upload flow into a Processing Queue where Worker Nodes perform Encoding. Encoded videos are pushed to a CDN."
-    },
-    {
-      "id": "typeahead",
-      "title": "Designing Typeahead Suggestion",
-      "description": "Designing Typeahead Suggestion",
-      "difficulty": "Medium",
-      "requirements": [
-        "Trie Data Structure",
-        "Storing top suggestions at each node",
-        "Map-Reduce for frequency calculation",
-        "Data Partitioning by hash/prefix"
-      ],
-      "key_topics": [
-        "Trie Data Structure",
-        "Storing top suggestions at each node",
-        "Map-Reduce for frequency calculation",
-        "Data Partitioning by hash/prefix"
-      ],
-      "theory": "Typeahead implies real-time completion. Trie data structures are optimal for prefix-matching at high scale.",
-      "components": ["Trie Cache", "MapReduce clusters", "Log Aggregator", "Database"],
-      "bottlenecks": ["Updating the Trie in real-time is expensive. Updates should be done in background batches.", "Storing large Tries requires sharding."],
-      "diagramHints": "Draw users typing into an API which queries a 'Trie Cache'. Show backend MapReduce workers processing logs to update the global Trie."
-    },
-    {
-      "id": "api_rate_limiter",
-      "title": "Designing an API Rate Limiter",
-      "description": "Designing an API Rate Limiter",
-      "difficulty": "Medium",
-      "requirements": [
-        "Fixed Window vs. Rolling Window Algorithms",
-        "Sliding Window with Counters (Redis Hash)",
-        "IP vs. User based throttling"
-      ],
-      "key_topics": [
-        "Fixed Window vs. Rolling Window Algorithms",
-        "Sliding Window with Counters (Redis Hash)",
-        "IP vs. User based throttling"
-      ],
-      "theory": "Rate Limiting restricts traffic to protect APIs from abuse. Common algorithms include Fixed Window, Sliding Window Log, and Sliding Window Counters (most optimal memory).",
-      "components": ["API Gateway", "Rate Limiting Middleware", "Redis (timestamps/counters)", "Rules Engine"],
-      "bottlenecks": ["Race conditions in Redis when counting concurrently.", "Latency overhead of checking limits for every API call."],
-      "diagramHints": "Clients hit an API Gateway, which queries a Rate Limiter component. The Rate Limiter reads counters from Redis. If allowed, it forwards to Backend App Servers."
+      "diagramHints": "1. FLOW: Tweet -> Write API -> Fan-out -> Follower Redis. 2. LINK: Search API -> Distributed Inverted Index nodes. 3. BOX: Snowflake service. 4. SHOW: Celebrity Pull-path."
     },
     {
       "id": "web_crawler",
-      "title": "Designing a Web Crawler",
-      "description": "Designing a Web Crawler",
+      "title": "Universal Web Crawler",
+      "description": "A system to index the internet with high efficiency and politeness.",
       "difficulty": "Hard",
       "requirements": [
-        "URL Frontier (Breadth-first search)",
-        "Document Input Stream (DIS)",
-        "Dedupe Tests (Checksums, Bloom Filters)",
-        "Politeness constraints and robots.txt"
+        "Scalability (Billions of pages)",
+        "Politeness (Don't DOS sites)",
+        "Deduplication (Simhash)",
+        "URL Frontier (Priority Queues)"
       ],
       "key_topics": [
-        "URL Frontier (Breadth-first search)",
-        "Document Input Stream (DIS)",
-        "Dedupe Tests (Checksums, Bloom Filters)",
-        "Politeness constraints and robots.txt"
+        "Robots.txt management",
+        "Bloom Filters for visited URLs",
+        "Fuzzy Hashing (Simhash)",
+        "DNS Caching"
       ],
-      "theory": "Web crawling requires picking a seeds URL, fetching HTML, extracting links, and resolving duplicates efficiently.",
-      "components": ["URL Frontier", "HTML Fetcher", "DNS Resolver", "Content Seen Module", "URL Extractors"],
-      "bottlenecks": ["DNS resolution is extremely slow unless aggressively cached.", "Politeness rules prevent spamming a single domain."],
-      "diagramHints": "Draw a core loop: URL Frontier -> HTML Fetcher -> Content Seen Check -> Link Extractor -> URL Seen Check -> Back to URL Frontier."
-    },
-    {
-      "id": "facebook_newsfeed",
-      "title": "Designing Facebook's Newsfeed",
-      "description": "Designing Facebook's Newsfeed",
-      "difficulty": "Hard",
-      "requirements": [
-        "Offline Generation for Newsfeed",
-        "Fanout-on-write vs Fanout-on-load",
-        "Feed Ranking algorithms"
+      "theory": "Crawling requires managing a 'URL Frontier'. The Frontier uses two levels of queues: Prioritization (based on page rank/utility) and Politeness (mapping hostnames to specific workers to ensure a delay between requests to the same site). Content deduplication is critical: we use Locality Sensitive Hashing (Simhash) to find 'near-duplicates' (e.g., same page with different tracking params). A Page-See component stores hashes of all crawled content to avoid re-indexing near-identical pages.",
+      "components": [
+        "URL Frontier (Redis/Kafka)",
+        "HTML Fetchers (Stateless Workers)",
+        "DNS Cache Service",
+        "Dedupe Engine (Simhash store)",
+        "Storage (BigTable/S3)"
       ],
-      "key_topics": [
-        "Offline Generation for Newsfeed",
-        "Fanout-on-write vs Fanout-on-load",
-        "Feed Ranking algorithms"
+      "bottlenecks": [
+        "DNS resolution: Millions of lookups. Solved by local DNS caches at every worker.",
+        "Spider Traps: Infinite URL loops. Solved by depth-limiters and link analysis.",
+        "Bandwidth: Multi-gigabit pipes required for distributed clusters."
       ],
-      "theory": "A newsfeed compiles updates from friends, pages, and groups. Offline generation provides sub-second latency.",
-      "components": ["Feed Generation Service", "Feed Ranking Engine", "Fanout Workers", "Graph API"],
-      "bottlenecks": ["Ranking algorithms are intensive.", "Huge datasets make real-time compilation impossible."],
-      "diagramHints": "Show a robust Fanout-on-write process updating follower cache lists. Display a fast Fanout-on-load process fetching data directly from cache."
+      "diagramHints": "1. LOOP: Frontier -> Fetcher -> Parser -> Extractor -> Frontier. 2. LINK: Fetcher to DNS Cache. 3. BOX: 'Bloom Filter' for visited check. 4. PATH: Content -> Simhash Check -> Storage."
     },
     {
       "id": "yelp",
-      "title": "Designing Yelp or Nearby Friends",
-      "description": "Designing Yelp or Nearby Friends",
+      "title": "Yelp / Proximity Search",
+      "description": "Geographical search service for points of interest (POI).",
       "difficulty": "Hard",
       "requirements": [
-        "Location-based search",
-        "Proximity servers",
-        "QuadTrees and Grids (implied)"
+        "Grid vs. QuadTree indexing",
+        "Geohashing (Base32 strings)",
+        "Moving vs. Static POIs",
+        "High Read Performance"
       ],
       "key_topics": [
-        "Location-based search",
-        "Proximity servers",
-        "QuadTrees and Grids (implied)"
+        "QuadTree leaf splitting",
+        "Geohash precision (Length 1-12)",
+        "Nearest Neighbor (KNN) Search",
+        "Z-Order Curves"
       ],
-      "theory": "Location-based services use spatial indexing techniques like Geohash or QuadTrees to quickly find points of interest nearby.",
-      "components": ["QuadTree Index Servers", "Location Updates Service", "Places DB"],
-      "bottlenecks": ["Updating QuadTrees is complex if users are constantly moving (e.g. Uber). Yelp places are static, so it's easier.", "Extreme read-heavy loads for queries."],
-      "diagramHints": "Draw an LBS (Location Based Service) connecting to an in-memory QuadTree cluster, which occasionally syncs to a persistent spatial database."
+      "theory": "Spatial querying involves dividing Earth's surface. QuadTrees recursively split the world into 4 quadrants; a leaf node is created when a quadrant contains < 500 POIs. This allows searching for nearby places in O(logN). Geohashing is another approach: it maps a 2D coordinate into a 1D string where longer prefixes mean closer proximity. For 'Nearby Friends' (moving users), QuadTrees are inefficient as rebuilding them is expensive. Instead, use a fixed Grid or Redis Geostacks which handle rapid location updates better.",
+      "components": [
+        "Global QuadTree (In-memory)",
+        "Places Database (Read-Replica)",
+        "Location Update Service (for moving users)",
+        "POI Meta-service"
+      ],
+      "bottlenecks": [
+        "QuadTree Rebuilding: For millions of moving users. Solved by using Pub/Sub or Geohash-based sharding.",
+        "Hotspots: dense cities vs rural areas. Dynamic QuadTrees split and merge based on density.",
+        "Latency: Distribute QuadTrees across regional data centers."
+      ],
+      "diagramHints": "1. DRAW: A recursive grid (QuadTree structure). 2. LINK: LBS Request -> Geohash Calculator -> QuadTree Searcher. 3. BOX: 'POI DB'. 4. PATH: Client GPS -> Update Service -> Redis GeoSet."
+    },
+    {
+      "id": "uber",
+      "title": "Uber / Ride-Sharing",
+      "description": "A dynamic marketplace connecting drivers and riders in real-time.",
+      "difficulty": "Hard",
+      "requirements": [
+        "Real-time dispatching (<1s)",
+        "Supply/Demand forecasting",
+        "Google S2 Library (Hilbert Curve)",
+        "Location heartbeats every 4s",
+        "Dynamic Pricing (Surge)"
+      ],
+      "key_topics": [
+        "Quadrant indexing vs S2 cells",
+        "Ring buffer for location history",
+        "Consistent Hashing for city partitions",
+        "Marketplace matching algorithm"
+      ],
+      "theory": "Uber's core challenge is the Dispatcher. The world is divided into S2 cells (Hilbert Curve mapping). Drivers send location updates every few seconds to 'Driver Location' service. When a rider requests a trip, the 'Matcher' identifies available drivers in the same S2 cell (and adjacent cells). It uses a dynamic marketplace model where Surge Pricing is calculated based on real-time supply/demand (Kafka streams analyzing trip requests vs driver availability in a geo-fence).",
+      "components": [
+        "Driver Location Service (Redis)",
+        "Dispatch Engine (Marketplace)",
+        "Trip Manager",
+        "Surge Pricing Engine (Spark Streaming)",
+        "Payment/Rating Service"
+      ],
+      "bottlenecks": [
+        "Write Load: Millions of drivers sending locations every 4s. Solved by sharding Redis by CityID.",
+        "Matching Accuracy: GPS drift/congestion. Use Google Maps ETA service inside the dispatcher.",
+        "Availability: Dispatcher must be stateless and horizontally scalable."
+      ],
+      "diagramHints": "1. FLOW: Driver --[GPS]--> WS Gateway -> Driver Location DB. 2. LINK: Rider -> Dispatcher -> Matcher API. 3. BOX: S2/Geohash logic layer. 4. SHOW: Surge Service reading from Kafka streams.",
+      "deep_dive": "The Dispatcher uses a Gossip-like protocol or a highly optimized Redis Cluster sharded by Geo-Hash. To handle 'Surge', we use a stream-processing engine (like Flink or Spark) that calculates the 'Request-to-Driver' ratio in moving 5-minute windows. If the ratio > 1.2, it triggers surge multipliers. The 'Matcher' doesn't just pick the closest driver; it filters by driver ratings, vehicle type, and 'direction of travel' to maximize throughput."
+    },
+    {
+      "id": "ticketmaster",
+      "title": "Ticketmaster / Booking System",
+      "description": "High-concurrency booking with strict inventory consistency.",
+      "difficulty": "Hard",
+      "requirements": [
+        "Transactional Integrity (ACID)",
+        "Virtual Waiting Room (Queueing)",
+        "Distributed Lock (Redis Redlock)",
+        "Event Sourcing for Audit",
+        "Search/Discovery (Elasticsearch)"
+      ],
+      "key_topics": [
+        "Inventory management (Atomicity)",
+        "Optimistic vs Pessimistic locking",
+        "Fault tolerance during payment",
+        "Global vs Regional scaling"
+      ],
+      "theory": "Designing for 'The Eras Tour' requires handling millions of requests for 50k seats. Key strategy: A 'Waiting Room' (Virtual Queue) that throttles incoming traffic to prevent DB crashing. For seat allocation, we use 'Temporary Holds' (Redis with TTL). When a user selects a seat, a distributed lock is placed. If payment succeeds, the seat is marked 'Sold' permanently. If it fails or TTL expires, the seat returns to the pool. ACID compliance in the DB is non-negotiable for the final booking state.",
+      "components": [
+        "Waiting Room Proxy",
+        "Inventory Service (Redis Holds + SQL)",
+        "Booking Service",
+        "Payment Gateway Integration",
+        "Notification Service (Email/SMS)"
+      ],
+      "bottlenecks": [
+        "Database Contention: Row-level locking on 'Seats' table. Solved by partitioning inventory by EventID.",
+        "Double Booking: Race conditions. Solved by idempotent booking IDs.",
+        "System wide failure: If any core component dies, users lose tickets. Use transactional sagas."
+      ],
+      "diagramHints": "1. DRAW: Users -> Waiting Room -> Load Balancer. 2. BOX: Redis for 'Temporary Seat Reservation'. 3. LINK: Payment Service to 3rd party API. 4. SHOW: Relational DB with ACID transactions for final 'Sold' status.",
+      "deep_dive": "Virtual Queueing works by issuing a 'Signed Token' with a sequence number. The app only allows tokens 1-5000 to reach the Booking API. Distributed locking is tricky: we use Redis with a 10-minute TTL for 'Hold'. If the user's internet drops, the lock expires automatically. For ultimate consistency, use a 'Two-Phase Commit' (2PC) or a Saga pattern between the Booking and Payment services to ensure we don't bill for an expired seat."
+    },
+    {
+      "id": "notification_service",
+      "title": "Notification Service",
+      "description": "A centralized platform for multi-channel message delivery (Push, Email, SMS).",
+      "difficulty": "Medium",
+      "requirements": [
+        "Reliability over Speed",
+        "Prioritization (Transactional vs Marketing)",
+        "Opt-out / Unsubscribe management",
+        "Idempotency (No duplicate delivery)",
+        "Multi-provider failover"
+      ],
+      "key_topics": [
+        "Message Queuing (Kafka)",
+        "Vendor Fallback logic",
+        "Rate Limiting per channel",
+        "Analytics/Tracking (Open rates)"
+      ],
+      "theory": "A notification system must be reliable and scalable. It receives requests from various services, validates user preferences (Opt-out), and pushes messages into specialized priority queues. Workers consume these messages and call vendor APIs (Twilio, SendGrid, FCM). To prevent duplicates, each notification has a unique 'RequestId' which is checked against a cache before processing. Fault tolerance is added via automatic retry logic with exponential backoff if a vendor is down.",
+      "components": [
+        "Notification API",
+        "Preference Service",
+        "Message Queues (Topic per channel/priority)",
+        "Vendors Connector (Stateless shim)",
+        "Tracking/Stats Service"
+      ],
+      "bottlenecks": [
+        "Vendor Latency: Calling external APIs is slow. Solved by asynchronous processing via queues.",
+        "Message Bursts: Marketing campaigns flooding the system. Solved by rate-limiting the consumption rate.",
+        "Duplicate delivery: Network retries causing double SMS. Solved by distributed locks or idempotency tables."
+      ],
+      "diagramHints": "1. BOX: Notification API -> Validation -> Queues. 2. LINK: Queues -> Workers -> External APIs (FCM/Twilio). 3. DRAW: 'Preference DB' check before queueing. 4. PATH: Webhook -> Tracking Service -> Analytics DB."
+    },
+    {
+      "id": "recommendation_system",
+      "title": "Recommendation System (Netflix Style)",
+      "description": "Scalable ML-driven engine for personalized content discovery.",
+      "difficulty": "Hard",
+      "requirements": [
+        "Collaborative Filtering",
+        "Content-based Filtering",
+        "Candidate Generation (Recall)",
+        "Ranking (Scoring)",
+        "Feature Store"
+      ],
+      "key_topics": [
+        "Matrix Factorization",
+        "Approximate Nearest Neighbors (ANN)",
+        "Model Training (Offline vs Online)",
+        "A/B Testing Framework"
+      ],
+      "theory": "Recommendation engines follow a two-stage process. 1. Candidate Generation (Recall): Quickly narrowing down millions of items to ~100 potential matches using lightweight algorithms (Matrix Factorization, ANN search with HNSW). 2. Ranking: A more complex ML model (Deep Neural Network) scores these ~100 items based on user features, context (time, device), and item metadata. The results are then re-ranked by business rules (diversity, freshness) before display.",
+      "components": [
+        "Feature Store (Streaming + Batch)",
+        "Recall Service (Vector DB / ANN)",
+        "Ranking Service (ML inference)",
+        "Feedback Loop (Kafka logging)",
+        "A/B Testing Manager"
+      ],
+      "bottlenecks": [
+        "Cold Start: New users/items have no history. Solved by content-based fallbacks (using metadata).",
+        "Inference Latency: Ranking models are slow. Solved by model quantization and caching top results for active users.",
+        "Data Drift: Models become outdated. Solved by continuous retraining pipelines."
+      ],
+      "diagramHints": "1. FLOW: User Context -> Recall Service -> Ranking Service -> Client. 2. PATH: User logs -> Kafka -> Feature Store -> Model Training. 3. BOX: 'Vector Database' (Pinecone/Milvus). 4. SHOW: A/B Testing switch at the end."
     }
   ]

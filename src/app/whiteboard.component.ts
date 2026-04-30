@@ -11,6 +11,14 @@ interface LineShape { type: 'line'; x1: number; y1: number; x2: number; y2: numb
 
 type Shape = PathShape | RectShape | CircleShape | TextShape | LineShape;
 
+interface Layer {
+  id: string;
+  name: string;
+  visible: boolean;
+  locked: boolean;
+  shapes: Shape[];
+}
+
 @Component({
   selector: 'app-whiteboard',
   standalone: true,
@@ -32,6 +40,54 @@ type Shape = PathShape | RectShape | CircleShape | TextShape | LineShape;
           (blur)="commitText($any($event).target.value)"
         />
       }
+
+      <!-- Layers Panel -->
+      <div class="absolute top-4 right-4 z-20 w-48 bg-slate-900/90 border border-slate-800 rounded-xl shadow-2xl backdrop-blur-md overflow-hidden flex flex-col transition-all h-fit max-h-[300px]">
+        <div class="p-3 border-b border-slate-800 flex items-center justify-between bg-slate-800/50">
+          <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Layers</span>
+          <button (click)="addLayer()" class="text-blue-400 hover:text-blue-300 transition outline-none" title="Add Layer">
+            <mat-icon class="text-[18px] w-[18px] h-[18px]">add_circle</mat-icon>
+          </button>
+        </div>
+        <div class="overflow-y-auto py-1">
+          @for (layer of layers; track layer.id) {
+            <div 
+              class="flex items-center px-3 py-2 gap-2 group transition-colors cursor-pointer"
+              [class.bg-blue-500/10]="activeLayerId === layer.id"
+              (click)="activeLayerId = layer.id"
+            >
+              <button (click)="$event.stopPropagation(); layer.visible = !layer.visible; draw()" 
+                      class="text-slate-500 hover:text-slate-300 transition outline-none"
+                      [class.text-blue-400]="layer.visible">
+                <mat-icon class="text-[16px] w-[16px] h-[16px]">{{ layer.visible ? 'visibility' : 'visibility_off' }}</mat-icon>
+              </button>
+              <span class="flex-1 text-[11px] font-medium truncate" 
+                    [class.text-slate-200]="activeLayerId === layer.id"
+                    [class.text-slate-400]="activeLayerId !== layer.id">
+                {{ layer.name }}
+              </span>
+              <div class="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button (click)="$event.stopPropagation(); moveLayer(layer.id, -1)" 
+                        class="text-slate-500 hover:text-slate-300 transition outline-none disabled:opacity-30"
+                        [disabled]="isFirst(layer.id)">
+                  <mat-icon class="text-[14px] w-[14px] h-[14px]">expand_less</mat-icon>
+                </button>
+                <button (click)="$event.stopPropagation(); moveLayer(layer.id, 1)" 
+                        class="text-slate-500 hover:text-slate-300 transition outline-none disabled:opacity-30"
+                        [disabled]="isLast(layer.id)">
+                  <mat-icon class="text-[14px] w-[14px] h-[14px]">expand_more</mat-icon>
+                </button>
+                @if (layers.length > 1) {
+                  <button (click)="$event.stopPropagation(); removeLayer(layer.id)" 
+                          class="text-rose-500/70 hover:text-rose-400 transition outline-none ml-1">
+                    <mat-icon class="text-[14px] w-[14px] h-[14px]">remove_circle</mat-icon>
+                  </button>
+                }
+              </div>
+            </div>
+          }
+        </div>
+      </div>
       
       <!-- Toolbar -->
       <div class="absolute bottom-8 left-1/2 -translate-x-1/2 z-10 flex items-center space-x-1 bg-slate-900 border border-slate-800 p-1.5 rounded-xl shadow-2xl backdrop-blur-md">
@@ -142,10 +198,13 @@ export class WhiteboardComponent implements AfterViewInit {
   ];
   
   currentFont = this.fonts[0].val;
-
   textInput = { visible: false, x: 0, y: 0, text: '' };
 
-  shapes: Shape[] = [];
+  layers: Layer[] = [
+    { id: 'l1', name: 'Base Layer', visible: true, locked: false, shapes: [] }
+  ];
+  activeLayerId = 'l1';
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   currentShape: any = null;
 
@@ -157,6 +216,51 @@ export class WhiteboardComponent implements AfterViewInit {
     { name: 'Text', val: 'text', icon: 'title' },
     { name: 'Eraser', val: 'eraser', icon: 'cleaning_services' },
   ];
+
+  get activeLayer() {
+    return this.layers.find(l => l.id === this.activeLayerId)!;
+  }
+
+  addLayer() {
+    const id = 'l' + (this.layers.length + 1);
+    this.layers.unshift({
+      id,
+      name: `Layer ${this.layers.length + 1}`,
+      visible: true,
+      locked: false,
+      shapes: []
+    });
+    this.activeLayerId = id;
+  }
+
+  removeLayer(id: string) {
+    if (this.layers.length <= 1) return;
+    this.layers = this.layers.filter(l => l.id !== id);
+    if (this.activeLayerId === id) {
+      this.activeLayerId = this.layers[0].id;
+    }
+    this.draw();
+  }
+
+  moveLayer(id: string, delta: number) {
+    const index = this.layers.findIndex(l => l.id === id);
+    if (index === -1) return;
+    const newIndex = index + delta;
+    if (newIndex < 0 || newIndex >= this.layers.length) return;
+    
+    const element = this.layers[index];
+    this.layers.splice(index, 1);
+    this.layers.splice(newIndex, 0, element);
+    this.draw();
+  }
+
+  isFirst(id: string) {
+    return this.layers[0].id === id;
+  }
+
+  isLast(id: string) {
+    return this.layers[this.layers.length - 1].id === id;
+  }
 
   ngAfterViewInit() {
     this.initCanvas();
@@ -186,9 +290,15 @@ export class WhiteboardComponent implements AfterViewInit {
     // Clear
     this.ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    for (const shape of this.shapes) {
-      this.renderShape(shape);
-    }
+    // Draw layers from bottom to top (reverse array for painting order)
+    [...this.layers].reverse().forEach(layer => {
+      if (layer.visible) {
+        for (const shape of layer.shapes) {
+          this.renderShape(shape);
+        }
+      }
+    });
+
     if (this.currentShape) {
       this.renderShape(this.currentShape);
     }
@@ -231,14 +341,14 @@ export class WhiteboardComponent implements AfterViewInit {
   }
 
   clear() {
-    this.shapes = [];
+    this.activeLayer.shapes = [];
     this.draw();
   }
 
   commitText(val: string) {
     if (!this.textInput.visible) return;
     if (val && val.trim()) {
-      this.shapes.push({ type: 'text', x: this.textInput.x, y: this.textInput.y, text: val.trim(), color: this.currentColor, font: this.currentFont });
+      this.activeLayer.shapes.push({ type: 'text', x: this.textInput.x, y: this.textInput.y, text: val.trim(), color: this.currentColor, font: this.currentFont });
       this.draw();
     }
     this.textInput.visible = false;
@@ -315,7 +425,7 @@ export class WhiteboardComponent implements AfterViewInit {
 
   onPointerUp() {
     if (this.isDrawing && this.currentShape) {
-      this.shapes.push(this.currentShape);
+      this.activeLayer.shapes.push(this.currentShape);
       this.currentShape = null;
     }
     this.isDrawing = false;

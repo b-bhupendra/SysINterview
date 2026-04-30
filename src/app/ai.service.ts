@@ -89,6 +89,15 @@ export class AiService {
       return 'No specific bottlenecks listed offline for this scenario.';
     }
 
+    if (text.includes('all') || text.includes('full') || text.includes('everything')) {
+      const components = scenario.components?.map(c => `- ${c}`).join('\n') || 'None listed';
+      const bottlenecks = scenario.bottlenecks?.map(b => `- ${b}`).join('\n') || 'None listed';
+      return `## ${scenario.title}\n\n**Theory:** ${scenario.theory}\n\n` +
+             `**Components:**\n${components}\n\n` +
+             `**Bottlenecks:**\n${bottlenecks}\n\n` +
+             `**Diagram Hints:**\n${scenario.diagramHints}`;
+    }
+
     if (text.includes('diagram') || text.includes('draw') || text.includes('whiteboard') || text.includes('hint')) {
       return `**Diagram Hints:**\n\n${scenario.diagramHints || 'Draw a standard 3-tier web architecture: Load Balancer -> Web Servers -> Cache/Database.'}`;
     }
