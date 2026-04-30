@@ -35,6 +35,46 @@ type Shape = PathShape | RectShape | CircleShape | TextShape | LineShape;
         }
         
         <div class="w-px h-6 bg-slate-800 mx-1 self-center"></div>
+
+        <!-- Color Picker -->
+        <div class="flex items-center space-x-1 px-1">
+           @for (color of colors; track color.val) {
+             <button (click)="currentColor = color.val"
+                     [title]="color.name"
+                     class="w-5 h-5 rounded-full border-2 transition-transform outline-none focus:ring-1 focus:ring-blue-500"
+                     [style.backgroundColor]="color.val"
+                     [class.scale-125]="currentColor === color.val"
+                     [class.border-white]="currentColor === color.val"
+                     [class.border-transparent]="currentColor !== color.val"
+             ></button>
+           }
+        </div>
+
+        <div class="w-px h-6 bg-slate-800 mx-1 self-center"></div>
+
+        <!-- Width Picker -->
+        <div class="flex items-center space-x-1 px-1 text-slate-300">
+           @for (width of widths; track width.val) {
+             <button (click)="currentWidth = width.val"
+                     [title]="width.name"
+                     class="w-6 h-6 flex items-center justify-center rounded transition-colors hover:bg-slate-800 outline-none focus:ring-1 focus:ring-blue-500"
+                     [class.bg-slate-700]="currentWidth === width.val"
+             >
+                <div class="bg-current rounded-full" [style.width.px]="width.val" [style.height.px]="width.val"></div>
+             </button>
+           }
+        </div>
+
+        <div class="w-px h-6 bg-slate-800 mx-1 self-center"></div>
+
+        <!-- Font Picker -->
+        <select (change)="currentFont = $any($event.target).value" class="bg-slate-800 text-slate-300 text-xs rounded p-1 border-none outline-none cursor-pointer focus:ring-1 focus:ring-blue-500 max-w-[80px]">
+           @for (font of fonts; track font.val) {
+             <option [value]="font.val" [selected]="currentFont === font.val">{{font.name}}</option>
+           }
+        </select>
+
+        <div class="w-px h-6 bg-slate-800 mx-1 self-center"></div>
         
         <button (click)="clear()" class="p-2 rounded-lg transition-colors flex items-center justify-center outline-none text-rose-400/80 hover:bg-slate-800 hover:text-rose-400" title="Clear Board">
           <mat-icon class="text-[20px] w-[20px] h-[20px]">delete_outline</mat-icon>
@@ -65,6 +105,29 @@ export class WhiteboardComponent implements AfterViewInit {
   currentColor = '#3b82f6'; // blue-500
   currentWidth = 3;
   
+  colors = [
+    { name: 'Blue', val: '#3b82f6' },
+    { name: 'Emerald', val: '#10b981' },
+    { name: 'Rose', val: '#f43f5e' },
+    { name: 'Amber', val: '#f59e0b' },
+    { name: 'White', val: '#f8fafc' },
+    { name: 'Slate', val: '#94a3b8' },
+  ];
+
+  widths = [
+    { name: 'Thin', val: 2 },
+    { name: 'Normal', val: 4 },
+    { name: 'Thick', val: 8 },
+  ];
+
+  fonts = [
+    { name: 'Sans', val: '500 20px "Inter", sans-serif' },
+    { name: 'Mono', val: '500 20px "JetBrains Mono", monospace' },
+    { name: 'Serif', val: '500 20px "Playfair Display", serif' },
+  ];
+  
+  currentFont = this.fonts[0].val;
+
   shapes: Shape[] = [];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   currentShape: any = null;
@@ -191,7 +254,7 @@ export class WhiteboardComponent implements AfterViewInit {
     } else if (m === 'text') {
       const text = prompt('Enter text:');
       if (text) {
-        this.shapes.push({ type: 'text', x, y, text, color: '#f8fafc', font: '500 20px "JetBrains Mono", monospace' });
+        this.shapes.push({ type: 'text', x, y, text, color: this.currentColor, font: this.currentFont });
       }
       this.isDrawing = false;
     }
