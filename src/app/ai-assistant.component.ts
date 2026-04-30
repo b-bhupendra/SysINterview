@@ -103,16 +103,16 @@ import { SystemDesignScenario } from './knowledge-base';
                 @if (aiService.lmConfig().enabled) {
                   <div class="space-y-3 pt-2">
                     <div>
-                      <label class="block text-[10px] uppercase text-slate-500 mb-1 tracking-wider font-semibold">Endpoint (Requires CORS)</label>
-                      <input type="text" [value]="aiService.lmConfig().endpoint" (input)="updateEndpoint($event)" class="w-full bg-slate-950 border border-slate-700 text-slate-200 text-xs px-2 py-1.5 rounded focus:outline-none focus:border-blue-500 transition-colors">
+                      <label for="endpoint-input" class="block text-[10px] uppercase text-slate-500 mb-1 tracking-wider font-semibold">Endpoint (Requires CORS)</label>
+                      <input id="endpoint-input" type="text" [value]="aiService.lmConfig().endpoint" (input)="updateEndpoint($event)" class="w-full bg-slate-950 border border-slate-700 text-slate-200 text-xs px-2 py-1.5 rounded focus:outline-none focus:border-blue-500 transition-colors">
                     </div>
                     <div>
-                      <label class="block text-[10px] uppercase text-slate-500 mb-1 tracking-wider font-semibold">Model Name</label>
-                      <input type="text" [value]="aiService.lmConfig().model" (input)="updateModel($event)" class="w-full bg-slate-950 border border-slate-700 text-slate-200 text-xs px-2 py-1.5 rounded focus:outline-none focus:border-blue-500 transition-colors">
+                      <label for="model-input" class="block text-[10px] uppercase text-slate-500 mb-1 tracking-wider font-semibold">Model Name</label>
+                      <input id="model-input" type="text" [value]="aiService.lmConfig().model" (input)="updateModel($event)" class="w-full bg-slate-950 border border-slate-700 text-slate-200 text-xs px-2 py-1.5 rounded focus:outline-none focus:border-blue-500 transition-colors">
                     </div>
                     <div>
-                      <label class="block text-[10px] uppercase text-slate-500 mb-1 tracking-wider font-semibold">Temperature ({{aiService.lmConfig().temperature}})</label>
-                      <input type="range" min="0" max="2" step="0.1" [value]="aiService.lmConfig().temperature" (input)="updateTemperature($event)" class="w-full accent-blue-500">
+                      <label for="temperature-input" class="block text-[10px] uppercase text-slate-500 mb-1 tracking-wider font-semibold">Temperature ({{aiService.lmConfig().temperature}})</label>
+                      <input id="temperature-input" type="range" min="0" max="2" step="0.1" [value]="aiService.lmConfig().temperature" (input)="updateTemperature($event)" class="w-full accent-blue-500">
                     </div>
                     <div>
                       <button (click)="testLmStudio()" class="w-full py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded text-slate-300 text-xs transition-colors font-medium">Test Connection</button>
