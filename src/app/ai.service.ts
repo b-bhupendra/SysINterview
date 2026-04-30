@@ -1,5 +1,6 @@
 import { Injectable, signal } from '@angular/core';
 import { GoogleGenAI } from '@google/genai';
+import { SCENARIOS } from './knowledge-base';
 
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
@@ -27,15 +28,48 @@ export class AiService {
   messages = signal<ChatMessage[]>([]);
   isProcessing = signal(false);
 
-  private getOfflineResponse(message: string): string {
+  private getOfflineResponse(message: string, scenarioId?: string): string {
     const text = message.toLowerCase();
-    if (text.includes('hi') || text.includes('hello')) {
-      return "Hello! I am your Offline System Design Assistant. You can configure LM Studio to use a local LLM in the settings, or toggle back to Gemini AI.";
+    
+    // Fallback/Generic Offline Matching
+    if (!scenarioId) {
+      if (text.includes('hi') || text.includes('hello')) {
+        return "Hello! I am your Offline System Design Assistant. You can ask me to 'explain theory', 'list components', or 'show bottlenecks' if you select a scenario. Or you can configure LM Studio in the AI Settings.";
+      }
+      if (text.includes('scale')) {
+        return "For scaling, consider horizontal scaling with load balancers and sharding databases.";
+      }
+      return `[OFFLINE MODE] You asked: "${message}". Select a scenario from the sidebar and ask me to 'explain theory', or configure LM Studio if you have a local server running.`;
     }
-    if (text.includes('scale')) {
-      return "For scaling, consider horizontal scaling with load balancers and sharding databases.";
+
+    const scenario = SCENARIOS.find(s => s.id === scenarioId);
+    if (!scenario) {
+      return `[OFFLINE MODE] Unknown scenario selected.`;
     }
-    return `[OFFLINE MODE] You asked: "${message}". Configure LM Studio if you have a local server running.`;
+
+    if (text.includes('theory') || text.includes('explain') || text.includes('summary')) {
+      return `**Theory for ${scenario.title}**\n\n${scenario.theory || 'No detailed theory available offline.'}\n\n*Would you like to know the main components or bottlenecks?*`;
+    }
+    
+    if (text.includes('component') || text.includes('architecture') || text.includes('high-level')) {
+      if (scenario.components && scenario.components.length > 0) {
+        return `**Main Components for ${scenario.title}:**\n\n` + scenario.components.map(c => `- ${c}`).join('\n');
+      }
+      return 'No specific components listed offline for this scenario.';
+    }
+
+    if (text.includes('bottleneck') || text.includes('tradeoff') || text.includes('issue')) {
+      if (scenario.bottlenecks && scenario.bottlenecks.length > 0) {
+        return `**Bottlenecks & Tradeoffs:**\n\n` + scenario.bottlenecks.map(b => `- ${b}`).join('\n');
+      }
+      return 'No specific bottlenecks listed offline for this scenario.';
+    }
+
+    if (text.includes('diagram') || text.includes('draw') || text.includes('whiteboard') || text.includes('hint')) {
+      return `**Diagram Hints:**\n\n${scenario.diagramHints || 'Draw a standard 3-tier web architecture: Load Balancer -> Web Servers -> Cache/Database.'}`;
+    }
+
+    return `[OFFLINE MODE] Scenario: ${scenario.title}.\n\nI am currently offline. You can ask me to:\n- Explain the theory\n- List the components\n- Discuss the bottlenecks\n- Give diagram hints\n\nAlternatively, switch to Gemini AI or connect to a local LM Studio server in the settings.`;
   }
 
   async checkLmStudio(endpoint: string): Promise<boolean> {
@@ -48,7 +82,7 @@ export class AiService {
     }
   }
 
-  async sendMessage(message: string, context?: string) {
+  async sendMessage(message: string, context?: string, scenarioId?: string) {
     this.messages.update(m => [...m, { role: 'user', text: message }]);
     this.isProcessing.set(true);
 
@@ -56,7 +90,7 @@ export class AiService {
 
     if (!useLmStudio && this.isOfflineMode()) {
       setTimeout(() => {
-        const reply = this.getOfflineResponse(message);
+        const reply = this.getOfflineResponse(message, scenarioId);
         this.messages.update(m => [...m, { role: 'assistant', text: reply }]);
         this.isProcessing.set(false);
       }, 1000);

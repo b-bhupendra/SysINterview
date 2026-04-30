@@ -35,6 +35,15 @@ import { SystemDesignScenario } from './knowledge-base';
            <div class="text-slate-500 flex flex-col items-center justify-center h-full gap-3 opacity-60">
              <mat-icon class="text-4xl w-10 h-10">waving_hand</mat-icon>
              <p class="text-center px-4 text-xs leading-relaxed">I'm your System Design Interview assistant. Tell me about your architecture!</p>
+             
+             @if (activeScenario()) {
+               <div class="flex flex-col gap-2 mt-4 items-stretch w-full max-w-[200px]">
+                 <button (click)="aiService.sendMessage('Explain theory', '', activeScenario()?.id)" class="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded text-[11px] text-emerald-400 hover:bg-slate-700 transition">Explain Theory</button>
+                 <button (click)="aiService.sendMessage('List components', '', activeScenario()?.id)" class="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded text-[11px] text-emerald-400 hover:bg-slate-700 transition">List Components</button>
+                 <button (click)="aiService.sendMessage('Show bottlenecks', '', activeScenario()?.id)" class="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded text-[11px] text-emerald-400 hover:bg-slate-700 transition">Show Bottlenecks</button>
+                 <button (click)="aiService.sendMessage('Diagram hints', '', activeScenario()?.id)" class="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded text-[11px] text-emerald-400 hover:bg-slate-700 transition">Diagram Hints</button>
+               </div>
+             }
            </div>
         }
 
@@ -202,7 +211,7 @@ export class AiAssistantComponent implements AfterViewChecked {
       ? `Scenario: ${this.activeScenario()?.title}. Requirements: ${this.activeScenario()?.requirements.join(', ')}`
       : 'No active scenario selected.';
 
-    this.aiService.sendMessage(val, context);
+    this.aiService.sendMessage(val, context, this.activeScenario()?.id);
   }
 }
 
